@@ -1,0 +1,17 @@
+[
+  {
+    "name": "spamassassin_easy_ham",
+    "label": "ham",
+    "url": "https://spamassassin.apache.org/old/publiccorpus/20030228_easy_ham.tar.bz2"
+  },
+  {
+    "name": "spamassassin_hard_ham",
+    "label": "ham",
+    "url": "https://spamassassin.apache.org/old/publiccorpus/20030228_hard_ham.tar.bz2"
+  },
+  {
+    "name": "spamassassin_spam",
+    "label": "spam",
+    "url": "https://spamassassin.apache.org/old/publiccorpus/20030228_spam.tar.bz2"
+  }
+]
