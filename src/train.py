@@ -1,4 +1,5 @@
 from pathlib import Path
+import logging
 
 import joblib
 import matplotlib.pyplot as plt
@@ -16,10 +17,13 @@ DATA = Path("data/processed/emails.csv")
 METRICS = Path("reports/metrics/classification_report.txt")
 FIGURE = Path("reports/figures/confusion_matrix.png")
 MODEL = Path("models/spam_nb.joblib")
+logger = logging.getLogger(__name__)
 
 
 def main():
+    logger.info("Train start: data=%s", DATA)
     data = pd.read_csv(DATA).fillna("")
+    logger.info("Train data loaded: rows=%s labels=%s", len(data), data["label"].value_counts().to_dict())
     x_train, x_test, y_train, y_test = train_test_split(
         data["text"],
         data["label"],
@@ -27,6 +31,7 @@ def main():
         random_state=42,
         stratify=data["label"],
     )
+    logger.info("Train split: train=%s test=%s", len(x_train), len(x_test))
 
     model = Pipeline(
         [
@@ -34,8 +39,10 @@ def main():
             ("nb", MultinomialNB()),
         ]
     )
+    logger.info("Fit model: TF-IDF + MultinomialNB")
     model.fit(x_train, y_train)
     predictions = model.predict(x_test)
+    logger.info("Predictions complete: count=%s", len(predictions))
 
     METRICS.parent.mkdir(parents=True, exist_ok=True)
     FIGURE.parent.mkdir(parents=True, exist_ok=True)
@@ -43,11 +50,14 @@ def main():
 
     report = classification_report(y_test, predictions)
     METRICS.write_text(report)
+    logger.info("Metrics saved: %s", METRICS)
     ConfusionMatrixDisplay.from_predictions(y_test, predictions)
     plt.tight_layout()
     plt.savefig(FIGURE)
     plt.close()
+    logger.info("Confusion matrix saved: %s", FIGURE)
     joblib.dump(model, MODEL)
+    logger.info("Model saved: %s", MODEL)
 
     print(report)
     print(f"Saved model to {MODEL}")

@@ -10,3 +10,8 @@ __pycache__/
 *.log
 *.cfg
 *.csv
+data/raw/downloads/
+data/processed/
+reports/figures/
+reports/metrics/
+models/

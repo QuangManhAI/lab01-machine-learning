@@ -1,7 +1,12 @@
+requests==2.34.2
 scrapy==2.11.2
+Twisted==24.3.0
 pymongo==4.7.3
 pandas==2.2.2
 scikit-learn==1.5.1
 matplotlib==3.9.1
 joblib==1.4.2
 python-dotenv==1.0.1
+kagglehub==0.3.13
+datasets==4.4.1
+pyarrow==22.0.0
