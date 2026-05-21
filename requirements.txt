@@ -10,3 +10,4 @@ python-dotenv==1.0.1
 kagglehub==0.3.13
 datasets==4.4.1
 pyarrow==22.0.0
+wordcloud==1.9.4

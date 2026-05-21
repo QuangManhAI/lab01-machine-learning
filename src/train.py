@@ -12,6 +12,7 @@ from sklearn.naive_bayes import MultinomialNB
 from sklearn.pipeline import Pipeline
 
 from src.error_logging import run_logged
+from src.preprocess_balance import stop_words_for_vectorizer
 
 
 DATA = Path("data/processed/emails.csv")
@@ -28,13 +29,14 @@ logger = logging.getLogger(__name__)
 def main():
     logger.info("Train start: data=%s", DATA)
     data = pd.read_csv(DATA).fillna("")
+    text_column = "clean_text" if "clean_text" in data.columns else "text"
     logger.info("Train data loaded: rows=%s labels=%s", len(data), data["label"].value_counts().to_dict())
     train_data, test_data = split_data(data)
-    x_train = train_data["text"]
+    x_train = train_data[text_column]
     y_train = train_data["label"]
-    x_test = test_data["text"]
+    x_test = test_data[text_column]
     y_test = test_data["label"]
-    logger.info("Train split: train=%s test=%s", len(train_data), len(test_data))
+    logger.info("Train split: train=%s test=%s text_column=%s", len(train_data), len(test_data), text_column)
 
     save_split_report(train_data, test_data)
     baseline = DummyClassifier(strategy="most_frequent")
@@ -57,8 +59,8 @@ def main():
     report = classification_report(y_test, predictions)
     METRICS.write_text(report)
     save_per_source_report(test_data, predictions)
-    cross_source = evaluate_cross_source_holdout(data)
-    save_summary_report(data, train_data, test_data, accuracy, baseline_accuracy, report, cross_source)
+    cross_source = evaluate_cross_source_holdout(data, text_column)
+    save_summary_report(data, train_data, test_data, accuracy, baseline_accuracy, report, cross_source, text_column)
     logger.info("Metrics saved: %s", METRICS)
     ConfusionMatrixDisplay.from_predictions(y_test, predictions)
     plt.tight_layout()
@@ -93,7 +95,7 @@ def split_data(data):
 def build_model():
     return Pipeline(
         [
-            ("tfidf", TfidfVectorizer(stop_words="english", min_df=2)),
+            ("tfidf", TfidfVectorizer(stop_words=stop_words_for_vectorizer(), min_df=2, ngram_range=(1, 2))),
             ("nb", MultinomialNB()),
         ]
     )
@@ -140,7 +142,7 @@ def save_per_source_report(test_data, predictions):
     logger.info("Per-source report saved: %s", SOURCE_REPORT)
 
 
-def evaluate_cross_source_holdout(data):
+def evaluate_cross_source_holdout(data, text_column):
     rows = []
     for source, holdout in data.groupby("source"):
         if len(holdout) < 50:
@@ -149,8 +151,8 @@ def evaluate_cross_source_holdout(data):
         if train["label"].nunique() < 2:
             continue
         model = build_model()
-        model.fit(train["text"], train["label"])
-        predictions = model.predict(holdout["text"])
+        model.fit(train[text_column], train["label"])
+        predictions = model.predict(holdout[text_column])
         labels = sorted(holdout["label"].unique())
         report = classification_report(
             holdout["label"],
@@ -174,8 +176,9 @@ def evaluate_cross_source_holdout(data):
     return result
 
 
-def save_summary_report(data, train_data, test_data, accuracy, baseline_accuracy, report, cross_source):
+def save_summary_report(data, train_data, test_data, accuracy, baseline_accuracy, report, cross_source, text_column):
     source_counts = data["source"].value_counts()
+    source_family_counts = data["source_family"].value_counts() if "source_family" in data.columns else pd.Series(dtype=int)
     source_label = pd.crosstab(data["source"], data["label"])
     for label in ["ham", "spam"]:
         if label not in source_label.columns:
@@ -186,8 +189,10 @@ def save_summary_report(data, train_data, test_data, accuracy, baseline_accuracy
         "",
         f"Rows: {len(data)}",
         f"Sources: {data['source'].nunique()}",
+        f"Source families: {data['source_family'].nunique() if 'source_family' in data.columns else 'n/a'}",
         f"Train rows: {len(train_data)}",
         f"Test rows: {len(test_data)}",
+        f"Training text column: {text_column}",
         f"Accuracy: {accuracy:.4f}",
         f"Most-frequent baseline accuracy: {baseline_accuracy:.4f}",
         "",
@@ -201,6 +206,12 @@ def save_summary_report(data, train_data, test_data, accuracy, baseline_accuracy
         "",
         "```text",
         source_counts.head(20).to_string(),
+        "```",
+        "",
+        "## Largest Source Families",
+        "",
+        "```text",
+        source_family_counts.head(20).to_string() if not source_family_counts.empty else "No source_family column.",
         "```",
         "",
         "## One-Label Sources",

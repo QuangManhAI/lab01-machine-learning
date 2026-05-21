@@ -59,39 +59,5 @@
     "max_index_pages": 52,
     "max_items": 1000,
     "sample_strategy": "even"
-  },
-  {
-    "name": "w3c_ietf_http_wg",
-    "label": "ham",
-    "kind": "html_index",
-    "urls": [
-      "https://lists.w3.org/Archives/Public/ietf-http-wg/2025AprJun/",
-      "https://lists.w3.org/Archives/Public/ietf-http-wg/2025JanMar/",
-      "https://lists.w3.org/Archives/Public/ietf-http-wg/2024OctDec/",
-      "https://lists.w3.org/Archives/Public/ietf-http-wg/2024JulSep/",
-      "https://lists.w3.org/Archives/Public/ietf-http-wg/2024AprJun/",
-      "https://lists.w3.org/Archives/Public/ietf-http-wg/2024JanMar/",
-      "https://lists.w3.org/Archives/Public/ietf-http-wg/2023OctDec/",
-      "https://lists.w3.org/Archives/Public/ietf-http-wg/2023JulSep/"
-    ],
-    "max_items": 1000,
-    "sample_strategy": "even"
-  },
-  {
-    "name": "w3c_public_webapps",
-    "label": "ham",
-    "kind": "html_index",
-    "urls": [
-      "https://lists.w3.org/Archives/Public/public-webapps/2025AprJun/",
-      "https://lists.w3.org/Archives/Public/public-webapps/2025JanMar/",
-      "https://lists.w3.org/Archives/Public/public-webapps/2024OctDec/",
-      "https://lists.w3.org/Archives/Public/public-webapps/2024JulSep/",
-      "https://lists.w3.org/Archives/Public/public-webapps/2024AprJun/",
-      "https://lists.w3.org/Archives/Public/public-webapps/2024JanMar/",
-      "https://lists.w3.org/Archives/Public/public-webapps/2023OctDec/",
-      "https://lists.w3.org/Archives/Public/public-webapps/2023JulSep/"
-    ],
-    "max_items": 1000,
-    "sample_strategy": "even"
   }
 ]

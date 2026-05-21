@@ -12,5 +12,4 @@ __pycache__/
 *.csv
 data/raw/downloads/
 data/processed/
-reports/figures/
 models/

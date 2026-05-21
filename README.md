@@ -5,9 +5,9 @@ Full flow:
 1. Download and extract packaged corpora from `config/corpora_sources.json`.
 2. Crawl live mailing-list archives from `config/crawler_sources.json`.
 3. Store all raw emails in local MongoDB.
-4. Export one merged CSV to `data/processed/emails.csv`.
-5. Create EDA plots in `reports/figures`.
-6. Train a Naive Bayes spam classifier.
+4. Export raw, cleaned full, and balanced training CSVs.
+5. Create EDA before processing and after strong processing.
+6. Train a Naive Bayes spam classifier on cleaned balanced text.
 
 Progress is written to `PIPELINE.log`.
 Errors are written to `ERRORS.log`.
@@ -23,11 +23,34 @@ Scrapy sources include:
 
 - LKML archive pages
 - FreeBSD 2025 yearly mailing-list indexes, sampled across weekly archives
-- W3C mailing-list archives across multiple periods
 
 Crawler sources use a balanced trial sample by default. Large archive pages are sampled evenly across the whole page instead of taking only the first messages, and the spider writes `data/processed/metrics/crawl_summary.json` when it closes.
 
 The `reports/` folder is image-only. Tables, text reports, and JSON summaries go under `data/processed/metrics/`.
+
+Export outputs:
+
+- `data/processed/emails_raw.csv`: merged raw export before strong processing, used for before-process EDA.
+- `data/processed/emails_full.csv`: full cleaned export for audit.
+- `data/processed/emails.csv`: cleaned and balanced dataset used by after-process EDA and training.
+- `data/processed/metrics/preprocessing_balance_report.md`: cleaning and balance summary.
+
+EDA outputs:
+
+- `reports/figures/before_process/`: raw EDA images before strong processing and balancing.
+- `reports/figures/after_process/`: EDA images after strong processing and balancing.
+- `data/processed/metrics/before_process/`: raw EDA tables/text summaries.
+- `data/processed/metrics/after_process/`: processed EDA tables/text summaries.
+
+Balancing is controlled by `.env`:
+
+```bash
+BALANCE_DATASET=true
+BALANCE_MAX_PER_SOURCE_FAMILY=1000
+BALANCE_RANDOM_SEED=42
+MIN_CLEAN_WORDS=5
+MIN_CLEAN_CHARS=25
+```
 
 Install:
 
@@ -85,7 +108,8 @@ Run one step:
 .venv/bin/python -m src.validate_crawl
 .venv/bin/python -m src.check_data
 .venv/bin/python -m src.export_dataset
-.venv/bin/python -m src.eda
+.venv/bin/python -m src.eda --input data/processed/emails_raw.csv --figures reports/figures/before_process --metrics data/processed/metrics/before_process --stage before_process --text-column text
+.venv/bin/python -m src.eda --input data/processed/emails.csv --figures reports/figures/after_process --metrics data/processed/metrics/after_process --stage after_process --text-column clean_text
 .venv/bin/python -m src.train
 ```
 

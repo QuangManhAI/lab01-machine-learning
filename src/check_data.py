@@ -15,9 +15,13 @@ def main():
     client.close()
 
     csv_path = Path("data/processed/emails.csv")
+    full_csv_path = Path("data/processed/emails_full.csv")
+    raw_csv_path = Path("data/processed/emails_raw.csv")
     print(f"MongoDB: {DB_NAME}.{MONGO_COLLECTION}")
     print(f"Raw emails: {count}")
-    print(f"CSV: {csv_path if csv_path.exists() else 'not exported yet'}")
+    print(f"Raw CSV before process: {raw_csv_path if raw_csv_path.exists() else 'not exported yet'}")
+    print(f"Balanced CSV: {csv_path if csv_path.exists() else 'not exported yet'}")
+    print(f"Full cleaned CSV: {full_csv_path if full_csv_path.exists() else 'not exported yet'}")
     if latest:
         print(f"Latest sample: [{latest.get('label')}] {latest.get('subject', '')}")
 

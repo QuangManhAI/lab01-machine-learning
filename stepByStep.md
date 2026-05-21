@@ -28,7 +28,7 @@
 - `LAB.md`: teacher requirements.
 - `ANALASIS.md`: project analysis.
 - `.env`: local MongoDB config.
-- `requirements.txt`: Python dependencies.
+- `requirements.txt`: Python dependencies, including `wordcloud`.
 - `scrapy.cfg`: Scrapy project entry.
 - `config/corpora_sources.json`: direct download/extract dataset sources.
 - `config/crawler_sources.json`: Scrapy mailing-list crawl sources.
@@ -39,7 +39,7 @@
 - `src/email_spam/pipelines.py`: saves crawled emails to MongoDB.
 - `src/download_corpora.py`: downloads/extracts SpamAssassin, Kaggle, Hugging Face, and Enron corpora.
   Logs download folders, cached files, byte progress, extraction filenames, tabular parsing, and MongoDB save counts.
-- `src/email_spam/spiders/archive_email.py`: crawls LKML, FreeBSD, and W3C mailing-list pages.
+- `src/email_spam/spiders/archive_email.py`: crawls LKML and FreeBSD mailing-list pages.
   Logs source start, index parse, discovered email links, queued email URLs, parsed email pages, and archive extraction.
 - `src/email_utils.py`: shared email/text parsing helpers.
 - `src/export_dataset.py`: exports MongoDB records to CSV.
@@ -192,8 +192,13 @@ Predict:
 - Raw MongoDB collection: `email_spam_lab.raw_emails`
 - EDA plots:
   - `reports/figures/label_distribution.png`
-  - `reports/figures/text_length_by_label.png`
-  - `reports/figures/top_words.png`
+  - `reports/figures/source_family_distribution.png`
+  - `reports/figures/source_family_label_distribution.png`
+  - `reports/figures/top_words_wordcloud.png`
+  - `reports/figures/ham_wordcloud.png`
+  - `reports/figures/spam_wordcloud.png`
+  - `reports/figures/text_length_boxplots.png`
+  - `reports/figures/text_shape_scatter.png`
 - Model:
   - `models/spam_nb.joblib`
 - Metrics:
@@ -217,7 +222,6 @@ Predict:
 
 - LKML weekly HTML archive pages.
 - FreeBSD mailing-list weekly archive pages with raw email links.
-- W3C mailing-list archive pages.
 
 Direct source formats supported:
 
@@ -228,7 +232,7 @@ Direct source formats supported:
 
 Crawler source formats supported:
 
-- `html_index`: index pages that link to LKML/W3C email pages or FreeBSD raw/mbox links.
+- `html_index`: index pages that link to LKML email pages or FreeBSD raw/mbox links.
 - `freebsd_year_index`: FreeBSD yearly list index; spider samples weekly archive pages evenly, then reads full weekly mbox archives.
 
 Each source has `max_items` to keep runtime bounded.
@@ -238,6 +242,7 @@ Human decision still needed:
 - Whether to raise or lower `max_items`.
 - Kaggle download may need Kaggle login/token depending on local Kaggle account state and dataset access.
 - Direct corpora no longer use per-email sleep. Only Scrapy live crawling uses `CRAWL_DELAY_SECONDS`.
+- W3C was removed from crawler config and export filters out old `w3c_` records if they still exist in MongoDB.
 
 ## Verification Already Done
 
@@ -257,7 +262,6 @@ archive_email
 - LKML HTML index extraction passed.
 - Direct SpamAssassin download/extract smoke test passed.
 - Hugging Face loader-compatible datasets checked.
-- W3C archive link extraction passed.
 - `.env` values load correctly.
 - Test failure wrote to `ERRORS.log`.
 - Progress logging writes to `PIPELINE.log`.
@@ -277,8 +281,6 @@ archive_email
   - `freebsd_current_2025`: 52 weekly pages available, all sampled until about 1000 messages.
   - `freebsd_stable_2025`: 52 weekly pages available, all sampled until about 1000 messages.
   - `freebsd_ports_2025`: 52 weekly pages available, all sampled until about 1000 messages.
-  - `w3c_ietf_http_wg`: 1937 available across eight archive periods, 1000 selected.
-  - `w3c_public_webapps`: 204 available across eight archive periods, all selected.
 - Direct large download sources are capped for trial balance:
   - AUEB Enron: 500 ham + 500 spam per source, enron1 through enron6.
   - Kaggle/Hugging Face large datasets: 1000 rows per source.
@@ -296,11 +298,53 @@ archive_email
 - Some old emails declare broken charsets like `unknown-8bit` or `DEFAULT_CHARSET`; code now falls back to safe bytes decoding, so these do not go to `ERRORS.log`.
 - AUEB archives list `ham/` before `spam/`; using plain `max_items=1000` captured only ham. The config now uses `max_items_per_label=500` for balanced trial data.
 - EDA now writes source contribution reports and plots:
-  - `data/processed/metrics/source_distribution.csv`
-  - `data/processed/metrics/source_label_distribution.csv`
+  - `data/processed/metrics/source_family_distribution.csv`
+  - `data/processed/metrics/source_family_label_distribution.csv`
   - `data/processed/metrics/data_quality_report.md`
-  - `reports/figures/source_distribution.png`
-  - `reports/figures/source_label_distribution.png`
+  - `data/processed/metrics/ham_eda_report.md`
+  - `data/processed/metrics/spam_eda_report.md`
+  - `reports/figures/source_family_distribution.png`
+  - `reports/figures/source_family_label_distribution.png`
+  - `reports/figures/top_words_wordcloud.png`
+  - `reports/figures/ham_wordcloud.png`
+  - `reports/figures/spam_wordcloud.png`
+  - `reports/figures/text_length_boxplots.png`
+  - `reports/figures/text_shape_scatter.png`
+- SpamAssassin archives are grouped into one EDA source family named `spamassassin`; other sources remain separate.
+- EDA separates vocabulary views by label: overall word cloud, ham word cloud, spam word cloud.
+- EDA includes `text_shape_scatter.png` to inspect length/word-count outliers and `text_length_boxplots.png` to compare length by label and source family.
+- Last regenerated EDA/training after W3C filtering:
+  - exported rows: `17967`
+  - ham rows: `13110`
+  - spam rows: `4857`
+  - source family counts:
+    - `spamassassin`: `1457`
+    - `kaggle_email_spam_classification`: `1000`
+    - `lkml_2024_02_week_3`: `1000`
+    - `lkml_2022_10_week_1`: `1000`
+    - `kaggle_enron_email_dataset`: `1000`
+    - `aueb_enron3_spam_ham`: `999`
+    - `huggingface_enron_spam`: `996`
+    - `aueb_enron2_spam_ham`: `995`
+    - `freebsd_hackers_2025`: `995`
+    - `aueb_enron1_spam_ham`: `992`
+    - `freebsd_questions_2025`: `990`
+    - `freebsd_stable_2025`: `990`
+    - `freebsd_ports_2025`: `984`
+    - `huggingface_kimdongh_spam_dataset`: `981`
+    - `aueb_enron4_spam_ham`: `963`
+    - `freebsd_current_2025`: `931`
+    - `aueb_enron6_spam_ham`: `925`
+    - `aueb_enron5_spam_ham`: `769`
+- Current model report after W3C filtering:
+  - accuracy: `0.94`
+  - ham precision/recall/F1: `0.93 / 1.00 / 0.96`
+  - spam precision/recall/F1: `0.99 / 0.79 / 0.88`
+  - baseline accuracy: `0.7301`
+- Important EDA insight from label reports:
+  - Spam top terms include HTML/marketing artifacts such as `font`, `br`, `nbsp`, `td`, `free`, `money`, `click`.
+  - Ham top terms include technical/community artifacts such as `freebsd`, `patch`, `kernel`, `struct`, plus Enron/business tokens.
+  - This means the model may learn both semantic spam cues and formatting/source artifacts; discuss this risk in analysis.
 - Training now uses source+label stratified split when possible and writes:
   - `data/processed/metrics/train_test_distribution.csv`
   - `data/processed/metrics/per_source_classification_report.csv`
@@ -343,33 +387,159 @@ tail -f PIPELINE.log
 .venv/bin/python -m src.check_data
 ```
 
-6. Export merged CSV.
+6. Export raw, cleaned, and balanced CSV files.
 
 ```bash
 .venv/bin/python -m src.export_dataset
 ```
 
-7. Run EDA.
+7. Run EDA before processing.
 
 ```bash
-.venv/bin/python -m src.eda
+.venv/bin/python -m src.eda --input data/processed/emails_raw.csv --figures reports/figures/before_process --metrics data/processed/metrics/before_process --stage before_process --text-column text
 ```
 
-8. Train model.
+8. Run EDA after strong processing and balancing.
+
+```bash
+.venv/bin/python -m src.eda --input data/processed/emails.csv --figures reports/figures/after_process --metrics data/processed/metrics/after_process --stage after_process --text-column clean_text
+```
+
+9. Train model.
 
 ```bash
 .venv/bin/python -m src.train
 ```
 
-9. Inspect outputs.
+10. Inspect outputs.
 
-- Dataset: `data/processed/emails.csv`
-- Figures: `reports/figures/`
+- Raw dataset before processing: `data/processed/emails_raw.csv`
+- Full cleaned dataset: `data/processed/emails_full.csv`
+- Balanced train dataset: `data/processed/emails.csv`
+- Before-process EDA figures: `reports/figures/before_process/`
+- After-process EDA figures: `reports/figures/after_process/`
 - Metrics: `data/processed/metrics/classification_report.txt`
 - Model: `models/spam_nb.joblib`
 
-10. If direct corpus ingestion is too slow, raise `CORPUS_BATCH_SIZE`.
+11. If direct corpus ingestion is too slow, raise `CORPUS_BATCH_SIZE`.
 
-11. If live crawling is too slow, decide whether to reintroduce explicit per-source limits or lower `CRAWL_DELAY_SECONDS` in `.env`.
+12. If live crawling is too slow, decide whether to reintroduce explicit per-source limits or lower `CRAWL_DELAY_SECONDS` in `.env`.
 
-12. If Kaggle fails, configure Kaggle credentials or temporarily remove Kaggle sources from `config/corpora_sources.json`.
+13. If Kaggle fails, configure Kaggle credentials or temporarily remove Kaggle sources from `config/corpora_sources.json`.
+
+## Latest Change: Strong Preprocessing And Dataset Balance
+
+- Added `src/preprocess_balance.py`.
+- It handles:
+  - HTML tag removal.
+  - `<script>`, `<style>`, and `noscript` removal.
+  - repeated `html.unescape`.
+  - quoted-printable line break cleanup.
+  - URL/email/number/hash normalization.
+  - punctuation cleanup and lowercase tokenization.
+  - stronger stopword removal for English, email headers, HTML artifacts, JavaScript artifacts, and dataset artifacts such as `escapenumber`, `escapelong`, `numbertoken`, `urltoken`, `hextoken`, `www`, `http`, `com`.
+  - `source_family` grouping, with all SpamAssassin files grouped as `spamassassin`.
+  - trainable row filtering using `MIN_CLEAN_WORDS` and `MIN_CLEAN_CHARS`.
+  - label-balanced and source-family-even sampling.
+- `.env` now includes:
+
+```env
+BALANCE_DATASET=true
+BALANCE_MAX_PER_SOURCE_FAMILY=1000
+BALANCE_RANDOM_SEED=42
+MIN_CLEAN_WORDS=5
+MIN_CLEAN_CHARS=25
+```
+
+- Export behavior changed:
+  - `data/processed/emails_full.csv` is the full cleaned audit export.
+  - `data/processed/emails.csv` is the balanced dataset used by EDA and training.
+  - `data/processed/metrics/preprocessing_balance_report.md` explains counts before/after cleaning and balancing.
+- Current verified export:
+  - full cleaned rows: `17582`
+  - trainable rows before balance: `17275`
+  - balanced rows: `8940`
+  - balanced labels: `4470 ham`, `4470 spam`
+- Current balance shape:
+  - Ham is sampled almost evenly across 18 source families, about `248-249` each.
+  - Spam is sampled across 10 spam-capable source families, about `300-547` each depending on available rows.
+  - This is intentional because LKML/FreeBSD/Kaggle Enron are ham-only; forcing equal source totals would make the whole dataset ham-heavy again.
+- EDA now uses `clean_text` for word clouds and top terms.
+- EDA now adds:
+  - `reports/figures/raw_vs_clean_length_scatter.png`
+  - clean length boxplots/scatter using `clean_char_count` and `clean_word_count`
+- Train now uses `clean_text` and a stronger stopword list in `TfidfVectorizer`.
+- Predict now cleans input text before calling the saved model.
+- `src.check_data` now prints both balanced CSV and full cleaned CSV.
+- Verification commands already run successfully:
+
+```bash
+.venv/bin/python -m compileall src
+.venv/bin/python -m src.export_dataset
+.venv/bin/python -m src.eda
+.venv/bin/python -m src.train
+.venv/bin/python -m src.check_data
+```
+
+- Current model after balanced clean-text training:
+  - rows: `8940`
+  - test rows: `1788`
+  - baseline accuracy: `0.4989`
+  - accuracy: `0.9793`
+  - ham precision/recall/F1: `0.98 / 0.98 / 0.98`
+  - spam precision/recall/F1: `0.98 / 0.98 / 0.98`
+- Still mention in analysis:
+  - Cross-source holdout shows SpamAssassin ham remains hard.
+  - Random split accuracy is not enough evidence by itself.
+  - Ham still contains strong source/domain language such as Enron, FreeBSD, Linux/kernel terms.
+
+## Latest Change: Pipeline With Before/After EDA
+
+- `src.run_pipeline` now completes the full flow:
+
+```bash
+.venv/bin/python -m src.download_corpora
+.venv/bin/python -m scrapy crawl archive_email
+.venv/bin/python -m src.validate_crawl
+.venv/bin/python -m src.export_dataset
+.venv/bin/python -m src.eda --input data/processed/emails_raw.csv --figures reports/figures/before_process --metrics data/processed/metrics/before_process --stage before_process --text-column text
+.venv/bin/python -m src.eda --input data/processed/emails.csv --figures reports/figures/after_process --metrics data/processed/metrics/after_process --stage after_process --text-column clean_text
+.venv/bin/python -m src.train
+```
+
+- `src.export_dataset` now writes:
+  - `data/processed/emails_raw.csv`: raw merged dataset before strong processing.
+  - `data/processed/emails_full.csv`: full cleaned audit dataset.
+  - `data/processed/emails.csv`: cleaned and balanced train/EDA dataset.
+- EDA now supports CLI args:
+  - `--input`
+  - `--figures`
+  - `--metrics`
+  - `--stage`
+  - `--text-column`
+- Before-process EDA uses raw `text` and basic English stopwords, so dirty artifacts like `font`, `br`, `nbsp`, `http`, `www`, `escapenumber`, and `escapelong` remain visible.
+- After-process EDA uses `clean_text` and the stronger stopword/artifact list.
+- EDA image folders:
+  - `reports/figures/before_process/`
+  - `reports/figures/after_process/`
+- EDA metric folders:
+  - `data/processed/metrics/before_process/`
+  - `data/processed/metrics/after_process/`
+- Root EDA metric files from the old flow were removed to avoid confusion. Model metrics remain in `data/processed/metrics/`.
+- `src.check_data` now prints raw CSV, balanced CSV, and full cleaned CSV.
+- Verified commands:
+
+```bash
+.venv/bin/python -m compileall src
+.venv/bin/python -m src.export_dataset
+.venv/bin/python -m src.eda --input data/processed/emails_raw.csv --figures reports/figures/before_process --metrics data/processed/metrics/before_process --stage before_process --text-column text
+.venv/bin/python -m src.eda --input data/processed/emails.csv --figures reports/figures/after_process --metrics data/processed/metrics/after_process --stage after_process --text-column clean_text
+.venv/bin/python -m src.train
+.venv/bin/python -m src.check_data
+```
+
+- Current generated counts:
+  - raw before-process CSV: `17967`
+  - cleaned full CSV: `17582`
+  - balanced train/after-process CSV: `8940`
+  - balanced labels: `4470 ham`, `4470 spam`
