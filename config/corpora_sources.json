@@ -54,7 +54,7 @@
     "label": "path",
     "url": "https://www2.aueb.gr/users/ion/data/enron-spam/preprocessed/enron1.tar.gz",
     "verify_ssl": false,
-    "max_items": 1000
+    "max_items_per_label": 1000
   },
   {
     "name": "aueb_enron2_spam_ham",
@@ -62,7 +62,7 @@
     "label": "path",
     "url": "https://www2.aueb.gr/users/ion/data/enron-spam/preprocessed/enron2.tar.gz",
     "verify_ssl": false,
-    "max_items": 1000
+    "max_items_per_label": 1000
   },
   {
     "name": "cmu_enron_maildir",

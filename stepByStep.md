@@ -18,7 +18,7 @@
 - EDA and visualization are required before/after data processing.
 - Model is Naive Bayes.
 - Direct corpus download/extract should run fast with no per-email sleep.
-- Scrapy live archive crawling is slow by default: 5 seconds per request/email.
+- Scrapy live archive crawling is slow by default: 2.5 seconds per request.
 - Progress logs should be written to `PIPELINE.log`.
 - All errors should be written to `ERRORS.log`.
 
@@ -58,21 +58,16 @@
 ```env
 MONGO_URI=mongodb://localhost:27017
 DB_NAME=email_spam_lab
-```
-
-Optional env:
-
-```env
-MONGO_COLLECTION=raw_emails
-MONGO_BATCH_SIZE=1
 CORPUS_BATCH_SIZE=1000
-CRAWL_DELAY_SECONDS=5
+CRAWL_DELAY_SECONDS=2.5
+DOWNLOAD_TIMEOUT_SECONDS=60
 ```
 
+Optional env: `MONGO_COLLECTION`, `MONGO_BATCH_SIZE`.
 Default collection is `raw_emails`.
 Default Scrapy Mongo write batch size is `1`, so crawled emails are saved immediately.
 Default direct corpus Mongo batch size is `1000`, so downloaded/extracted datasets insert fast.
-Default crawler delay is `5` seconds per crawled request/email.
+Default crawler delay is `2.5` seconds per crawled request.
 
 ## Install
 
@@ -140,6 +135,7 @@ This runs:
 ```bash
 .venv/bin/python -m src.download_corpora
 .venv/bin/python -m scrapy crawl archive_email
+.venv/bin/python -m src.validate_crawl
 .venv/bin/python -m src.export_dataset
 .venv/bin/python -m src.eda
 .venv/bin/python -m src.train
@@ -201,7 +197,7 @@ Predict:
 - Model:
   - `models/spam_nb.joblib`
 - Metrics:
-  - `reports/metrics/classification_report.txt`
+  - `data/processed/metrics/classification_report.txt`
 - Error log:
   - `ERRORS.log`
 - Progress log:
@@ -271,16 +267,41 @@ archive_email
 
 - Full real ELT can be long because it includes large corpora and live archive crawling.
 - Direct corpus extraction should be fast because it uses local archive parsing and MongoDB bulk writes.
-- Scrapy crawling is intentionally slow. The live archive crawl can take a long time because each crawled email waits 5 seconds.
+- Scrapy crawling is intentionally polite. The live archive crawl can take a long time because each request waits 2.5 seconds.
+- Crawler config no longer cuts archive pages with small `max_items` values. It queues all discovered email links for each configured archive address.
+- Current discovered crawl sizes are roughly:
+  - `lkml_2022_10_week_1`: 7781 email pages.
+  - `lkml_2024_02_week_3`: 8438 email pages.
+  - `freebsd_questions_2025_12_01`: 1 full mbox archive link.
+  - `freebsd_hackers_2025_12_01`: 1 full mbox archive link.
+  - `freebsd_current_2025_12_01`: 1 full mbox archive link.
+  - `w3c_ietf_http_wg_2025_apr_jun`: 216 email pages.
+  - `w3c_public_webapps_2025_apr_jun`: 21 email pages.
+- Scrapy writes `data/processed/metrics/crawl_summary.json` when it closes.
+- `src.run_pipeline` now validates crawl summary before export/EDA/train, so it does not silently train after a failed or empty crawl.
 - During ingestion, data is first saved in MongoDB. CSV appears only after `src.export_dataset` runs.
 - Code style follows the project request: short files, simple flow, no unnecessary comments.
 - Watch progress with `tail -f PIPELINE.log`.
 - Watch failures with `tail -f ERRORS.log`.
-- `data/raw/downloads/`, `data/processed/`, reports, models, and log files are ignored by git.
+- `data/raw/downloads/`, `data/processed/`, `reports/figures/`, models, and log files are ignored by git.
+- `reports/` is image-only. Do not put `.csv`, `.txt`, `.md`, or `.json` files under `reports/`.
 - `config/sources.json` was removed. Use `config/corpora_sources.json` and `config/crawler_sources.json`.
 - AUEB Enron-Spam URLs use `verify_ssl=false` because their HTTPS certificate failed local validation.
 - The AUEB `InsecureRequestWarning` is suppressed in code now; the pipeline logs one clear warning instead of printing urllib3 noise.
 - Some old emails declare broken charsets like `unknown-8bit` or `DEFAULT_CHARSET`; code now falls back to safe bytes decoding, so these do not go to `ERRORS.log`.
+- AUEB archives list `ham/` before `spam/`; using plain `max_items=1000` captured only ham. The config now uses `max_items_per_label=1000`, and AUEB has been re-ingested with both ham and spam.
+- EDA now writes source contribution reports and plots:
+  - `data/processed/metrics/source_distribution.csv`
+  - `data/processed/metrics/source_label_distribution.csv`
+  - `data/processed/metrics/data_quality_report.md`
+  - `reports/figures/source_distribution.png`
+  - `reports/figures/source_label_distribution.png`
+- Training now uses source+label stratified split when possible and writes:
+  - `data/processed/metrics/train_test_distribution.csv`
+  - `data/processed/metrics/per_source_classification_report.csv`
+  - `data/processed/metrics/cross_source_holdout_report.csv`
+  - `data/processed/metrics/model_summary.md`
+- The headline random split accuracy is not enough for conclusion. Use cross-source holdout to discuss source shift and model generalization.
 - CMU Enron archive is large and its host may timeout. `DOWNLOAD_TIMEOUT_SECONDS=60` keeps one dead source from blocking the whole run for too long.
 - Kaggle sources can fail until local Kaggle auth is configured.
 
@@ -339,11 +360,11 @@ tail -f PIPELINE.log
 
 - Dataset: `data/processed/emails.csv`
 - Figures: `reports/figures/`
-- Metrics: `reports/metrics/classification_report.txt`
+- Metrics: `data/processed/metrics/classification_report.txt`
 - Model: `models/spam_nb.joblib`
 
 10. If direct corpus ingestion is too slow, raise `CORPUS_BATCH_SIZE`.
 
-11. If live crawling is too slow, decide whether to lower `max_items` or lower `CRAWL_DELAY_SECONDS` in `.env`.
+11. If live crawling is too slow, decide whether to reintroduce explicit per-source limits or lower `CRAWL_DELAY_SECONDS` in `.env`.
 
 12. If Kaggle fails, configure Kaggle credentials or temporarily remove Kaggle sources from `config/corpora_sources.json`.

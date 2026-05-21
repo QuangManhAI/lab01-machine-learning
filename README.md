@@ -26,7 +26,9 @@ Scrapy sources include:
 - FreeBSD mailing-list archives
 - W3C mailing-list archives
 
-Each source has `max_items` so the slow 5s/email crawler collects a broad sample without running forever.
+Crawler sources are not sample-capped by default. The spider queues all email links discovered from each configured archive address and writes `data/processed/metrics/crawl_summary.json` when it closes.
+
+The `reports/` folder is image-only. Tables, text reports, and JSON summaries go under `data/processed/metrics/`.
 
 Install:
 
@@ -41,7 +43,7 @@ Configure local MongoDB in `.env`:
 MONGO_URI=mongodb://localhost:27017
 DB_NAME=email_spam_lab
 CORPUS_BATCH_SIZE=1000
-CRAWL_DELAY_SECONDS=5
+CRAWL_DELAY_SECONDS=2.5
 ```
 
 Raw crawler data is stored in MongoDB:
@@ -81,6 +83,7 @@ Run one step:
 ```bash
 .venv/bin/python -m src.download_corpora
 .venv/bin/python -m scrapy crawl archive_email
+.venv/bin/python -m src.validate_crawl
 .venv/bin/python -m src.check_data
 .venv/bin/python -m src.export_dataset
 .venv/bin/python -m src.eda

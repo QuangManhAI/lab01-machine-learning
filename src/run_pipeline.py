@@ -10,6 +10,7 @@ logger = logging.getLogger(__name__)
 COMMANDS = [
     [sys.executable, "-m", "src.download_corpora"],
     [sys.executable, "-m", "scrapy", "crawl", "archive_email"],
+    [sys.executable, "-m", "src.validate_crawl"],
     [sys.executable, "-m", "src.export_dataset"],
     [sys.executable, "-m", "src.eda"],
     [sys.executable, "-m", "src.train"],

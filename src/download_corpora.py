@@ -63,8 +63,14 @@ def process_source(source, collection):
 
 def url_archive_items(source):
     path = download_to_file(source)
+    per_label_limit = source.get("max_items_per_label")
+    label_counts = {}
     for name, raw in read_archive_path(path):
         label = label_for_path(source, name)
+        if per_label_limit is not None:
+            if label_counts.get(label, 0) >= per_label_limit:
+                continue
+            label_counts[label] = label_counts.get(label, 0) + 1
         item = email_item(source, source["url"], name, raw, label)
         item["local_path"] = str(path)
         item["extracted_from"] = str(path)
@@ -268,7 +274,7 @@ def save_items(collection, source, items):
     saved = 0
     operations = []
     for index, item in enumerate(items):
-        if source.get("max_items") is not None and index >= source["max_items"]:
+        if source.get("max_items_per_label") is None and source.get("max_items") is not None and index >= source["max_items"]:
             break
         item["label"] = normalize_label(item["label"])
         operations.append(

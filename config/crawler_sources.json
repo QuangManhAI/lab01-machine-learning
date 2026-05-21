@@ -3,49 +3,42 @@
     "name": "lkml_2022_10_week_1",
     "label": "ham",
     "kind": "html_index",
-    "url": "https://lkml.indiana.edu/2210.1/date.html",
-    "max_items": 100
+    "url": "https://lkml.indiana.edu/2210.1/date.html"
   },
   {
     "name": "lkml_2024_02_week_3",
     "label": "ham",
     "kind": "html_index",
-    "url": "https://lkml.indiana.edu/2402.3/date.html",
-    "max_items": 100
+    "url": "https://lkml.indiana.edu/2402.3/date.html"
   },
   {
     "name": "freebsd_questions_2025_12_01",
     "label": "ham",
     "kind": "html_index",
-    "url": "https://mail-archive.freebsd.org/mail/archive/2025/freebsd-questions/20251201.freebsd-questions.html",
-    "max_items": 60
+    "url": "https://mail-archive.freebsd.org/mail/archive/2025/freebsd-questions/20251201.freebsd-questions.html"
   },
   {
     "name": "freebsd_hackers_2025_12_01",
     "label": "ham",
     "kind": "html_index",
-    "url": "https://mail-archive.freebsd.org/mail/archive/2025/freebsd-hackers/20251201.freebsd-hackers.html",
-    "max_items": 60
+    "url": "https://mail-archive.freebsd.org/mail/archive/2025/freebsd-hackers/20251201.freebsd-hackers.html"
   },
   {
     "name": "freebsd_current_2025_12_01",
     "label": "ham",
     "kind": "html_index",
-    "url": "https://mail-archive.freebsd.org/mail/archive/2025/freebsd-current/20251201.freebsd-current.html",
-    "max_items": 60
+    "url": "https://mail-archive.freebsd.org/mail/archive/2025/freebsd-current/20251201.freebsd-current.html"
   },
   {
     "name": "w3c_ietf_http_wg_2025_apr_jun",
     "label": "ham",
     "kind": "html_index",
-    "url": "https://lists.w3.org/Archives/Public/ietf-http-wg/2025AprJun/",
-    "max_items": 80
+    "url": "https://lists.w3.org/Archives/Public/ietf-http-wg/2025AprJun/"
   },
   {
     "name": "w3c_public_webapps_2025_apr_jun",
     "label": "ham",
     "kind": "html_index",
-    "url": "https://lists.w3.org/Archives/Public/public-webapps/2025AprJun/",
-    "max_items": 80
+    "url": "https://lists.w3.org/Archives/Public/public-webapps/2025AprJun/"
   }
 ]
