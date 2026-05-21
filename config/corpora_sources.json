@@ -54,7 +54,7 @@
     "label": "path",
     "url": "https://www2.aueb.gr/users/ion/data/enron-spam/preprocessed/enron1.tar.gz",
     "verify_ssl": false,
-    "max_items_per_label": 1000
+    "max_items_per_label": 500
   },
   {
     "name": "aueb_enron2_spam_ham",
@@ -62,47 +62,40 @@
     "label": "path",
     "url": "https://www2.aueb.gr/users/ion/data/enron-spam/preprocessed/enron2.tar.gz",
     "verify_ssl": false,
-    "max_items_per_label": 1000
-  },
-  {
-    "name": "cmu_enron_maildir",
-    "type": "url_archive",
-    "label": "ham",
-    "url": "https://www.cs.cmu.edu/~enron/enron_mail_20110402.tgz",
-    "max_items": 1000
+    "max_items_per_label": 500
   },
   {
     "name": "kaggle_email_spam_classification",
     "type": "kaggle",
     "dataset": "purusinghvi/email-spam-classification-dataset",
-    "max_items": 5000
+    "max_items": 1000
   },
   {
     "name": "kaggle_enron_email_dataset",
     "type": "kaggle",
     "dataset": "wcukierski/enron-email-dataset",
     "default_label": "ham",
-    "max_items": 5000
+    "max_items": 1000
   },
   {
     "name": "huggingface_enron_spam",
     "type": "huggingface",
     "dataset": "SetFit/enron_spam",
     "split": "train",
-    "max_items": 5000
+    "max_items": 1000
   },
   {
     "name": "huggingface_kimdongh_spam_dataset",
     "type": "huggingface",
     "dataset": "KimDongH/spam_dataset",
     "split": "train",
-    "max_items": 5000
+    "max_items": 1000
   },
   {
     "name": "huggingface_farshad72_spam_email",
     "type": "huggingface",
     "dataset": "farshad72/spam_email",
     "split": "train",
-    "max_items": 5000
+    "max_items": 1000
   }
 ]

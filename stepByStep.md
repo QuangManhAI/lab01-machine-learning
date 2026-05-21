@@ -18,7 +18,7 @@
 - EDA and visualization are required before/after data processing.
 - Model is Naive Bayes.
 - Direct corpus download/extract should run fast with no per-email sleep.
-- Scrapy live archive crawling is slow by default: 2.5 seconds per request.
+- Scrapy live archive crawling uses a fast trial delay by default: 0.5 seconds per request.
 - Progress logs should be written to `PIPELINE.log`.
 - All errors should be written to `ERRORS.log`.
 
@@ -59,7 +59,7 @@
 MONGO_URI=mongodb://localhost:27017
 DB_NAME=email_spam_lab
 CORPUS_BATCH_SIZE=1000
-CRAWL_DELAY_SECONDS=2.5
+CRAWL_DELAY_SECONDS=0.5
 DOWNLOAD_TIMEOUT_SECONDS=60
 ```
 
@@ -67,7 +67,7 @@ Optional env: `MONGO_COLLECTION`, `MONGO_BATCH_SIZE`.
 Default collection is `raw_emails`.
 Default Scrapy Mongo write batch size is `1`, so crawled emails are saved immediately.
 Default direct corpus Mongo batch size is `1000`, so downloaded/extracted datasets insert fast.
-Default crawler delay is `2.5` seconds per crawled request.
+Default crawler delay is `0.5` seconds per crawled request.
 
 ## Install
 
@@ -210,7 +210,6 @@ Predict:
 - SpamAssassin public corpus ham archives.
 - SpamAssassin public corpus spam archives.
 - AUEB Enron-Spam archives.
-- CMU Enron Email Dataset archive.
 - Kaggle spam/email datasets via `kagglehub`.
 - Hugging Face spam/email datasets via `datasets`.
 
@@ -229,7 +228,8 @@ Direct source formats supported:
 
 Crawler source formats supported:
 
-- `html_index`: index pages that link to FreeBSD raw emails, LKML HTML email pages, or W3C HTML email pages.
+- `html_index`: index pages that link to LKML/W3C email pages or FreeBSD raw/mbox links.
+- `freebsd_year_index`: FreeBSD yearly list index; spider samples weekly archive pages evenly, then reads full weekly mbox archives.
 
 Each source has `max_items` to keep runtime bounded.
 
@@ -267,16 +267,21 @@ archive_email
 
 - Full real ELT can be long because it includes large corpora and live archive crawling.
 - Direct corpus extraction should be fast because it uses local archive parsing and MongoDB bulk writes.
-- Scrapy crawling is intentionally polite. The live archive crawl can take a long time because each request waits 2.5 seconds.
-- Crawler config no longer cuts archive pages with small `max_items` values. It queues all discovered email links for each configured archive address.
-- Current discovered crawl sizes are roughly:
-  - `lkml_2022_10_week_1`: 7781 email pages.
-  - `lkml_2024_02_week_3`: 8438 email pages.
-  - `freebsd_questions_2025_12_01`: 1 full mbox archive link.
-  - `freebsd_hackers_2025_12_01`: 1 full mbox archive link.
-  - `freebsd_current_2025_12_01`: 1 full mbox archive link.
-  - `w3c_ietf_http_wg_2025_apr_jun`: 216 email pages.
-  - `w3c_public_webapps_2025_apr_jun`: 21 email pages.
+- Scrapy crawling is intentionally polite. The trial profile uses 0.5 seconds per request.
+- Crawler config now uses balanced trial sampling. Large archive pages use `max_items=500` and `sample_strategy=even`, so the crawler samples across the whole archive instead of taking the first 500 links.
+- Current discovered/selected crawl sizes are roughly:
+  - `lkml_2022_10_week_1`: 7781 available email pages, 500 selected.
+  - `lkml_2024_02_week_3`: 8438 available email pages, 500 selected.
+  - `freebsd_questions_2025`: 52 weekly pages available, 24 selected evenly.
+  - `freebsd_hackers_2025`: 52 weekly pages available, 24 selected evenly.
+  - `freebsd_current_2025`: 52 weekly pages available, 24 selected evenly.
+  - `freebsd_stable_2025`: 52 weekly pages available, 24 selected evenly.
+  - `freebsd_ports_2025`: 52 weekly pages available, 24 selected evenly.
+  - `w3c_ietf_http_wg`: 1115 available across four archive periods.
+  - `w3c_public_webapps`: 86 available across four archive periods.
+- Direct large download sources are capped for trial balance:
+  - AUEB Enron: 500 ham + 500 spam per source.
+  - Kaggle/Hugging Face large datasets: 1000 rows per source.
 - Scrapy writes `data/processed/metrics/crawl_summary.json` when it closes.
 - `src.run_pipeline` now validates crawl summary before export/EDA/train, so it does not silently train after a failed or empty crawl.
 - During ingestion, data is first saved in MongoDB. CSV appears only after `src.export_dataset` runs.
@@ -289,7 +294,7 @@ archive_email
 - AUEB Enron-Spam URLs use `verify_ssl=false` because their HTTPS certificate failed local validation.
 - The AUEB `InsecureRequestWarning` is suppressed in code now; the pipeline logs one clear warning instead of printing urllib3 noise.
 - Some old emails declare broken charsets like `unknown-8bit` or `DEFAULT_CHARSET`; code now falls back to safe bytes decoding, so these do not go to `ERRORS.log`.
-- AUEB archives list `ham/` before `spam/`; using plain `max_items=1000` captured only ham. The config now uses `max_items_per_label=1000`, and AUEB has been re-ingested with both ham and spam.
+- AUEB archives list `ham/` before `spam/`; using plain `max_items=1000` captured only ham. The config now uses `max_items_per_label=500` for balanced trial data.
 - EDA now writes source contribution reports and plots:
   - `data/processed/metrics/source_distribution.csv`
   - `data/processed/metrics/source_label_distribution.csv`
@@ -302,7 +307,7 @@ archive_email
   - `data/processed/metrics/cross_source_holdout_report.csv`
   - `data/processed/metrics/model_summary.md`
 - The headline random split accuracy is not enough for conclusion. Use cross-source holdout to discuss source shift and model generalization.
-- CMU Enron archive is large and its host may timeout. `DOWNLOAD_TIMEOUT_SECONDS=60` keeps one dead source from blocking the whole run for too long.
+- CMU Enron maildir was removed from corpus config because it is very large, slow, mostly ham, and bad for quick balanced trial data.
 - Kaggle sources can fail until local Kaggle auth is configured.
 
 ## Todo After Compact

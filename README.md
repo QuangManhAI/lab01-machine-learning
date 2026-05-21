@@ -23,10 +23,10 @@ Direct download/extract sources include:
 Scrapy sources include:
 
 - LKML archive pages
-- FreeBSD mailing-list archives
-- W3C mailing-list archives
+- FreeBSD 2025 yearly mailing-list indexes, sampled across weekly archives
+- W3C mailing-list archives across multiple periods
 
-Crawler sources are not sample-capped by default. The spider queues all email links discovered from each configured archive address and writes `data/processed/metrics/crawl_summary.json` when it closes.
+Crawler sources use a balanced trial sample by default. Large archive pages are sampled evenly across the whole page instead of taking only the first messages, and the spider writes `data/processed/metrics/crawl_summary.json` when it closes.
 
 The `reports/` folder is image-only. Tables, text reports, and JSON summaries go under `data/processed/metrics/`.
 
@@ -43,7 +43,7 @@ Configure local MongoDB in `.env`:
 MONGO_URI=mongodb://localhost:27017
 DB_NAME=email_spam_lab
 CORPUS_BATCH_SIZE=1000
-CRAWL_DELAY_SECONDS=2.5
+CRAWL_DELAY_SECONDS=0.5
 ```
 
 Raw crawler data is stored in MongoDB:

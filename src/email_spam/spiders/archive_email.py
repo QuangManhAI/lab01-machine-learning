@@ -20,7 +20,15 @@ class ArchiveEmailSpider(scrapy.Spider):
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
-        self.stats_by_source = defaultdict(lambda: {"index_pages": 0, "discovered_urls": 0, "queued_urls": 0, "scraped_items": 0})
+        self.stats_by_source = defaultdict(
+            lambda: {
+                "index_pages": 0,
+                "discovered_urls": 0,
+                "queued_urls": 0,
+                "scraped_items": 0,
+                "available_items": 0,
+            }
+        )
         self.seen_urls = set()
 
     def start_requests(self):
@@ -28,13 +36,38 @@ class ArchiveEmailSpider(scrapy.Spider):
         self.logger.info("Loaded crawler sources: %s", len(sources))
         for source in sources:
             kind = source.get("kind", "archive")
-            callback = self.parse_html_index if kind == "html_index" else self.parse
-            self.logger.info("Start crawl source: %s kind=%s url=%s", source["name"], kind, source["url"])
-            yield scrapy.Request(source["url"], callback=callback, cb_kwargs={"source": source})
+            callback = self.callback_for_kind(kind)
+            urls = source["urls"] if "urls" in source else [source["url"]]
+            for url in urls:
+                self.logger.info("Start crawl source: %s kind=%s url=%s", source["name"], kind, url)
+                yield scrapy.Request(url, callback=callback, cb_kwargs={"source": source})
+
+    def callback_for_kind(self, kind):
+        if kind == "html_index":
+            return self.parse_html_index
+        if kind == "freebsd_year_index":
+            return self.parse_freebsd_year_index
+        return self.parse
+
+    def parse_freebsd_year_index(self, response, source):
+        self.stats_by_source[source["name"]]["index_pages"] += 1
+        self.logger.info("Parse FreeBSD year index: source=%s url=%s", source["name"], response.url)
+        archive_pages = []
+        for href in response.css("a::attr(href)").getall():
+            if re.match(r"[0-9]{8}\.freebsd-[a-z0-9-]+\.html$", href):
+                archive_pages.append(urljoin(response.url, href))
+        archive_pages = self.unique_urls(archive_pages)
+        self.stats_by_source[source["name"]]["available_items"] += len(archive_pages)
+        selected = self.select_items(archive_pages, {"name": source["name"], "max_items": source.get("max_index_pages"), "sample_strategy": source.get("sample_strategy", "even")})
+        self.logger.info("FreeBSD year index pages: source=%s available=%s selected=%s", source["name"], len(archive_pages), len(selected))
+        for url in selected:
+            yield from self.queue_url(url, self.parse_html_index, source)
 
     def parse(self, response, source):
         self.logger.info("Parse archive response: source=%s url=%s bytes=%s", source["name"], response.url, len(response.body))
-        for name, raw in self.read_archive(response.body, response.url):
+        items = list(self.read_archive(response.body, response.url))
+        self.stats_by_source[source["name"]]["available_items"] += len(items)
+        for name, raw in self.select_items(items, source):
             self.stats_by_source[source["name"]]["scraped_items"] += 1
             self.logger.info("Crawled email: source=%s path=%s bytes=%s", source["name"], name, len(raw))
             yield email_item(source, response.url, name, raw)
@@ -64,17 +97,22 @@ class ArchiveEmailSpider(scrapy.Spider):
             len(html_links),
         )
         if archive_links:
-            for url in archive_links:
+            self.stats_by_source[source["name"]]["available_items"] += len(archive_links)
+            for url in self.select_items(archive_links, source):
                 yield from self.queue_url(url, self.parse_mbox_archive, source)
             return
-        for url in raw_links:
-            yield from self.queue_url(url, self.parse_raw_email, source)
-        for url in html_links:
-            yield from self.queue_url(url, self.parse_html_email, source)
+        links = raw_links + html_links
+        self.stats_by_source[source["name"]]["available_items"] += len(links)
+        selected = self.select_items(links, source)
+        for url in selected:
+            callback = self.parse_raw_email if self.is_freebsd_raw_url(url) else self.parse_html_email
+            yield from self.queue_url(url, callback, source)
 
     def parse_mbox_archive(self, response, source):
         count = 0
-        for name, raw in self.read_mbox(response.body):
+        items = list(self.read_mbox(response.body))
+        self.stats_by_source[source["name"]]["available_items"] += len(items)
+        for name, raw in self.select_items(items, source):
             count += 1
             self.stats_by_source[source["name"]]["scraped_items"] += 1
             archive_path = f"{response.url}#{name}"
@@ -114,6 +152,25 @@ class ArchiveEmailSpider(scrapy.Spider):
 
     def unique_urls(self, urls):
         return list(dict.fromkeys(urls))
+
+    def select_items(self, items, source):
+        max_items = source.get("max_items")
+        if max_items is None or len(items) <= max_items:
+            return items
+        if source.get("sample_strategy", "even") != "even":
+            return items[:max_items]
+        if max_items <= 1:
+            return items[:max_items]
+        last_index = len(items) - 1
+        selected_indexes = sorted({round(index * last_index / (max_items - 1)) for index in range(max_items)})
+        selected = [items[index] for index in selected_indexes]
+        self.logger.info(
+            "Sample source evenly: source=%s available=%s selected=%s",
+            source["name"],
+            len(items),
+            len(selected),
+        )
+        return selected
 
     def read_archive(self, content, url):
         if url.endswith(".gz") or content.startswith(b"\x1f\x8b"):
