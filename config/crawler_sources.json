@@ -4,7 +4,7 @@
     "label": "ham",
     "kind": "html_index",
     "url": "https://lkml.indiana.edu/2210.1/date.html",
-    "max_items": 500,
+    "max_items": 1000,
     "sample_strategy": "even"
   },
   {
@@ -12,7 +12,7 @@
     "label": "ham",
     "kind": "html_index",
     "url": "https://lkml.indiana.edu/2402.3/date.html",
-    "max_items": 500,
+    "max_items": 1000,
     "sample_strategy": "even"
   },
   {
@@ -20,7 +20,7 @@
     "label": "ham",
     "kind": "freebsd_year_index",
     "url": "https://mail-archive.freebsd.org/mail/archive/2025/freebsd-questions/",
-    "max_index_pages": 24,
+    "max_index_pages": 52,
     "max_items": 1000,
     "sample_strategy": "even"
   },
@@ -29,7 +29,7 @@
     "label": "ham",
     "kind": "freebsd_year_index",
     "url": "https://mail-archive.freebsd.org/mail/archive/2025/freebsd-hackers/",
-    "max_index_pages": 24,
+    "max_index_pages": 52,
     "max_items": 1000,
     "sample_strategy": "even"
   },
@@ -38,7 +38,7 @@
     "label": "ham",
     "kind": "freebsd_year_index",
     "url": "https://mail-archive.freebsd.org/mail/archive/2025/freebsd-current/",
-    "max_index_pages": 24,
+    "max_index_pages": 52,
     "max_items": 1000,
     "sample_strategy": "even"
   },
@@ -47,7 +47,7 @@
     "label": "ham",
     "kind": "freebsd_year_index",
     "url": "https://mail-archive.freebsd.org/mail/archive/2025/freebsd-stable/",
-    "max_index_pages": 24,
+    "max_index_pages": 52,
     "max_items": 1000,
     "sample_strategy": "even"
   },
@@ -56,7 +56,7 @@
     "label": "ham",
     "kind": "freebsd_year_index",
     "url": "https://mail-archive.freebsd.org/mail/archive/2025/freebsd-ports/",
-    "max_index_pages": 24,
+    "max_index_pages": 52,
     "max_items": 1000,
     "sample_strategy": "even"
   },
@@ -68,7 +68,11 @@
       "https://lists.w3.org/Archives/Public/ietf-http-wg/2025AprJun/",
       "https://lists.w3.org/Archives/Public/ietf-http-wg/2025JanMar/",
       "https://lists.w3.org/Archives/Public/ietf-http-wg/2024OctDec/",
-      "https://lists.w3.org/Archives/Public/ietf-http-wg/2024JulSep/"
+      "https://lists.w3.org/Archives/Public/ietf-http-wg/2024JulSep/",
+      "https://lists.w3.org/Archives/Public/ietf-http-wg/2024AprJun/",
+      "https://lists.w3.org/Archives/Public/ietf-http-wg/2024JanMar/",
+      "https://lists.w3.org/Archives/Public/ietf-http-wg/2023OctDec/",
+      "https://lists.w3.org/Archives/Public/ietf-http-wg/2023JulSep/"
     ],
     "max_items": 1000,
     "sample_strategy": "even"
@@ -81,7 +85,11 @@
       "https://lists.w3.org/Archives/Public/public-webapps/2025AprJun/",
       "https://lists.w3.org/Archives/Public/public-webapps/2025JanMar/",
       "https://lists.w3.org/Archives/Public/public-webapps/2024OctDec/",
-      "https://lists.w3.org/Archives/Public/public-webapps/2024JulSep/"
+      "https://lists.w3.org/Archives/Public/public-webapps/2024JulSep/",
+      "https://lists.w3.org/Archives/Public/public-webapps/2024AprJun/",
+      "https://lists.w3.org/Archives/Public/public-webapps/2024JanMar/",
+      "https://lists.w3.org/Archives/Public/public-webapps/2023OctDec/",
+      "https://lists.w3.org/Archives/Public/public-webapps/2023JulSep/"
     ],
     "max_items": 1000,
     "sample_strategy": "even"

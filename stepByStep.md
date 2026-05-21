@@ -209,7 +209,7 @@ Predict:
 
 - SpamAssassin public corpus ham archives.
 - SpamAssassin public corpus spam archives.
-- AUEB Enron-Spam archives.
+- AUEB Enron-Spam archives: enron1 through enron6, capped at about 1000/source by 500 ham + 500 spam.
 - Kaggle spam/email datasets via `kagglehub`.
 - Hugging Face spam/email datasets via `datasets`.
 
@@ -268,19 +268,19 @@ archive_email
 - Full real ELT can be long because it includes large corpora and live archive crawling.
 - Direct corpus extraction should be fast because it uses local archive parsing and MongoDB bulk writes.
 - Scrapy crawling is intentionally polite. The trial profile uses 0.5 seconds per request.
-- Crawler config now uses balanced trial sampling. Large archive pages use `max_items=500` and `sample_strategy=even`, so the crawler samples across the whole archive instead of taking the first 500 links.
+- Crawler config now uses balanced trial sampling. Large archive pages use `max_items=1000` and `sample_strategy=even`, so the crawler samples across the whole archive instead of taking the first 1000 links.
 - Current discovered/selected crawl sizes are roughly:
-  - `lkml_2022_10_week_1`: 7781 available email pages, 500 selected.
-  - `lkml_2024_02_week_3`: 8438 available email pages, 500 selected.
-  - `freebsd_questions_2025`: 52 weekly pages available, 24 selected evenly.
-  - `freebsd_hackers_2025`: 52 weekly pages available, 24 selected evenly.
-  - `freebsd_current_2025`: 52 weekly pages available, 24 selected evenly.
-  - `freebsd_stable_2025`: 52 weekly pages available, 24 selected evenly.
-  - `freebsd_ports_2025`: 52 weekly pages available, 24 selected evenly.
-  - `w3c_ietf_http_wg`: 1115 available across four archive periods.
-  - `w3c_public_webapps`: 86 available across four archive periods.
+  - `lkml_2022_10_week_1`: 7781 available email pages, 1000 selected.
+  - `lkml_2024_02_week_3`: 8438 available email pages, 1000 selected.
+  - `freebsd_questions_2025`: 52 weekly pages available, all sampled until about 1000 messages.
+  - `freebsd_hackers_2025`: 52 weekly pages available, all sampled until about 1000 messages.
+  - `freebsd_current_2025`: 52 weekly pages available, all sampled until about 1000 messages.
+  - `freebsd_stable_2025`: 52 weekly pages available, all sampled until about 1000 messages.
+  - `freebsd_ports_2025`: 52 weekly pages available, all sampled until about 1000 messages.
+  - `w3c_ietf_http_wg`: 1937 available across eight archive periods, 1000 selected.
+  - `w3c_public_webapps`: 204 available across eight archive periods, all selected.
 - Direct large download sources are capped for trial balance:
-  - AUEB Enron: 500 ham + 500 spam per source.
+  - AUEB Enron: 500 ham + 500 spam per source, enron1 through enron6.
   - Kaggle/Hugging Face large datasets: 1000 rows per source.
 - Scrapy writes `data/processed/metrics/crawl_summary.json` when it closes.
 - `src.run_pipeline` now validates crawl summary before export/EDA/train, so it does not silently train after a failed or empty crawl.

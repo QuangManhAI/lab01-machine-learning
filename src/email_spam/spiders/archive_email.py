@@ -67,7 +67,9 @@ class ArchiveEmailSpider(scrapy.Spider):
         self.logger.info("Parse archive response: source=%s url=%s bytes=%s", source["name"], response.url, len(response.body))
         items = list(self.read_archive(response.body, response.url))
         self.stats_by_source[source["name"]]["available_items"] += len(items)
-        for name, raw in self.select_items(items, source):
+        for name, raw in self.select_items(items, source, use_remaining=True):
+            if self.source_full(source):
+                break
             self.stats_by_source[source["name"]]["scraped_items"] += 1
             self.logger.info("Crawled email: source=%s path=%s bytes=%s", source["name"], name, len(raw))
             yield email_item(source, response.url, name, raw)
@@ -98,12 +100,12 @@ class ArchiveEmailSpider(scrapy.Spider):
         )
         if archive_links:
             self.stats_by_source[source["name"]]["available_items"] += len(archive_links)
-            for url in self.select_items(archive_links, source):
+            for url in self.select_items(archive_links, source, use_remaining=False):
                 yield from self.queue_url(url, self.parse_mbox_archive, source)
             return
         links = raw_links + html_links
         self.stats_by_source[source["name"]]["available_items"] += len(links)
-        selected = self.select_items(links, source)
+        selected = self.select_items(links, source, use_remaining=True)
         for url in selected:
             callback = self.parse_raw_email if self.is_freebsd_raw_url(url) else self.parse_html_email
             yield from self.queue_url(url, callback, source)
@@ -112,7 +114,9 @@ class ArchiveEmailSpider(scrapy.Spider):
         count = 0
         items = list(self.read_mbox(response.body))
         self.stats_by_source[source["name"]]["available_items"] += len(items)
-        for name, raw in self.select_items(items, source):
+        for name, raw in self.select_items(items, source, use_remaining=True):
+            if self.source_full(source):
+                break
             count += 1
             self.stats_by_source[source["name"]]["scraped_items"] += 1
             archive_path = f"{response.url}#{name}"
@@ -121,17 +125,23 @@ class ArchiveEmailSpider(scrapy.Spider):
         self.logger.info("Parsed mbox archive: source=%s url=%s messages=%s", source["name"], response.url, count)
 
     def parse_raw_email(self, response, source):
+        if self.source_full(source):
+            return
         self.stats_by_source[source["name"]]["scraped_items"] += 1
         self.logger.info("Parse raw email: source=%s url=%s bytes=%s", source["name"], response.url, len(response.body))
         yield email_item(source, response.url, response.url, response.body)
 
     def parse_html_email(self, response, source):
+        if self.source_full(source):
+            return
         self.stats_by_source[source["name"]]["scraped_items"] += 1
         self.logger.info("Parse html email: source=%s url=%s bytes=%s", source["name"], response.url, len(response.body))
         yield email_item(source, response.url, response.url, html_to_email_bytes(response.text))
 
     def queue_url(self, url, callback, source):
         if url in self.seen_urls:
+            return
+        if callback.__name__ in {"parse_raw_email", "parse_html_email"} and self.stats_by_source[source["name"]]["queued_urls"] >= source.get("max_items", float("inf")):
             return
         self.seen_urls.add(url)
         self.stats_by_source[source["name"]]["discovered_urls"] += 1
@@ -153,8 +163,10 @@ class ArchiveEmailSpider(scrapy.Spider):
     def unique_urls(self, urls):
         return list(dict.fromkeys(urls))
 
-    def select_items(self, items, source):
+    def select_items(self, items, source, use_remaining=False):
         max_items = source.get("max_items")
+        if use_remaining and max_items is not None:
+            max_items = max(max_items - self.stats_by_source[source["name"]]["scraped_items"], 0)
         if max_items is None or len(items) <= max_items:
             return items
         if source.get("sample_strategy", "even") != "even":
@@ -171,6 +183,10 @@ class ArchiveEmailSpider(scrapy.Spider):
             len(selected),
         )
         return selected
+
+    def source_full(self, source):
+        max_items = source.get("max_items")
+        return max_items is not None and self.stats_by_source[source["name"]]["scraped_items"] >= max_items
 
     def read_archive(self, content, url):
         if url.endswith(".gz") or content.startswith(b"\x1f\x8b"):

@@ -65,6 +65,38 @@
     "max_items_per_label": 500
   },
   {
+    "name": "aueb_enron3_spam_ham",
+    "type": "url_archive",
+    "label": "path",
+    "url": "https://www2.aueb.gr/users/ion/data/enron-spam/preprocessed/enron3.tar.gz",
+    "verify_ssl": false,
+    "max_items_per_label": 500
+  },
+  {
+    "name": "aueb_enron4_spam_ham",
+    "type": "url_archive",
+    "label": "path",
+    "url": "https://www2.aueb.gr/users/ion/data/enron-spam/preprocessed/enron4.tar.gz",
+    "verify_ssl": false,
+    "max_items_per_label": 500
+  },
+  {
+    "name": "aueb_enron5_spam_ham",
+    "type": "url_archive",
+    "label": "path",
+    "url": "https://www2.aueb.gr/users/ion/data/enron-spam/preprocessed/enron5.tar.gz",
+    "verify_ssl": false,
+    "max_items_per_label": 500
+  },
+  {
+    "name": "aueb_enron6_spam_ham",
+    "type": "url_archive",
+    "label": "path",
+    "url": "https://www2.aueb.gr/users/ion/data/enron-spam/preprocessed/enron6.tar.gz",
+    "verify_ssl": false,
+    "max_items_per_label": 500
+  },
+  {
     "name": "kaggle_email_spam_classification",
     "type": "kaggle",
     "dataset": "purusinghvi/email-spam-classification-dataset",

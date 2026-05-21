@@ -17,8 +17,7 @@ Direct download/extract sources include:
 - SpamAssassin public corpus spam and ham archives
 - Kaggle datasets
 - Hugging Face datasets
-- Enron Email Dataset
-- AUEB Enron-Spam datasets
+- AUEB Enron-Spam datasets, enron1 through enron6
 
 Scrapy sources include:
 
