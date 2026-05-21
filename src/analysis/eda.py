@@ -7,8 +7,8 @@ import pandas as pd
 from sklearn.feature_extraction.text import CountVectorizer
 from wordcloud import WordCloud
 
-from src.error_logging import run_logged
-from src.preprocess_balance import source_family, stop_words_for_vectorizer
+from src.common.error_logging import run_logged
+from src.data.preprocess_balance import source_family, stop_words_for_vectorizer
 
 
 DATA = Path("data/processed/emails.csv")

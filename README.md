@@ -28,6 +28,14 @@ Crawler sources use a balanced trial sample by default. Large archive pages are 
 
 The `reports/` folder is image-only. Tables, text reports, and JSON summaries go under `data/processed/metrics/`.
 
+Source layout:
+
+- `src/data/`: corpus download, Mongo export, strong preprocessing, balancing, data checks.
+- `src/analysis/`: before/after EDA generation.
+- `src/model/`: train and predict with the saved Naive Bayes pipeline.
+- `src/pipeline/`: full-flow orchestration.
+- `src/common/`: shared logging setup.
+
 Export outputs:
 
 - `data/processed/emails_raw.csv`: merged raw export before strong processing, used for before-process EDA.
@@ -83,7 +91,7 @@ email_spam_lab.raw_emails
 Check where data is:
 
 ```bash
-.venv/bin/python -m src.check_data
+.venv/bin/python -m src.data.check_data
 ```
 
 Watch logs:
@@ -103,24 +111,24 @@ mongod --dbpath data/mongo
 Run all:
 
 ```bash
-.venv/bin/python -m src.run_pipeline
+.venv/bin/python -m src.pipeline.run_pipeline
 ```
 
 Run one step:
 
 ```bash
-.venv/bin/python -m src.download_corpora
+.venv/bin/python -m src.data.download_corpora
 .venv/bin/python -m scrapy crawl archive_email
 .venv/bin/python -m src.validate_crawl
-.venv/bin/python -m src.check_data
-.venv/bin/python -m src.export_dataset
-.venv/bin/python -m src.eda --input data/processed/emails_raw.csv --figures reports/figures/before_process --metrics data/processed/metrics/before_process --stage before_process --text-column text
-.venv/bin/python -m src.eda --input data/processed/emails.csv --figures reports/figures/after_process --metrics data/processed/metrics/after_process --stage after_process --text-column clean_text
-.venv/bin/python -m src.train
+.venv/bin/python -m src.data.check_data
+.venv/bin/python -m src.data.export_dataset
+.venv/bin/python -m src.analysis.eda --input data/processed/emails_raw.csv --figures reports/figures/before_process --metrics data/processed/metrics/before_process --stage before_process --text-column text
+.venv/bin/python -m src.analysis.eda --input data/processed/emails.csv --figures reports/figures/after_process --metrics data/processed/metrics/after_process --stage after_process --text-column clean_text
+.venv/bin/python -m src.model.train
 ```
 
 Predict:
 
 ```bash
-.venv/bin/python -m src.predict "win money now"
+.venv/bin/python -m src.model.predict "win money now"
 ```

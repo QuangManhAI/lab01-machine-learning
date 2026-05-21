@@ -2,7 +2,7 @@ import json
 import logging
 from pathlib import Path
 
-from src.error_logging import run_logged
+from src.common.error_logging import run_logged
 
 
 SUMMARY = Path("data/processed/metrics/crawl_summary.json")

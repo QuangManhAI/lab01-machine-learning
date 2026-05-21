@@ -11,8 +11,8 @@ from sklearn.model_selection import train_test_split
 from sklearn.naive_bayes import MultinomialNB
 from sklearn.pipeline import Pipeline
 
-from src.error_logging import run_logged
-from src.preprocess_balance import stop_words_for_vectorizer
+from src.common.error_logging import run_logged
+from src.data.preprocess_balance import stop_words_for_vectorizer
 
 
 DATA = Path("data/processed/emails.csv")

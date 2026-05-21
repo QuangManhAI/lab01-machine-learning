@@ -2,22 +2,22 @@ import logging
 import subprocess
 import sys
 
-from src.error_logging import run_logged
+from src.common.error_logging import run_logged
 
 logger = logging.getLogger(__name__)
 
 
 COMMANDS = [
-    ("download corpora", [sys.executable, "-m", "src.download_corpora"]),
+    ("download corpora", [sys.executable, "-m", "src.data.download_corpora"]),
     ("crawl archives", [sys.executable, "-m", "scrapy", "crawl", "archive_email"]),
     ("validate crawl", [sys.executable, "-m", "src.validate_crawl"]),
-    ("export/process/balance", [sys.executable, "-m", "src.export_dataset"]),
+    ("export/process/balance", [sys.executable, "-m", "src.data.export_dataset"]),
     (
         "EDA before process",
         [
             sys.executable,
             "-m",
-            "src.eda",
+            "src.analysis.eda",
             "--input",
             "data/processed/emails_raw.csv",
             "--figures",
@@ -35,7 +35,7 @@ COMMANDS = [
         [
             sys.executable,
             "-m",
-            "src.eda",
+            "src.analysis.eda",
             "--input",
             "data/processed/emails.csv",
             "--figures",
@@ -48,7 +48,7 @@ COMMANDS = [
             "clean_text",
         ],
     ),
-    ("train model", [sys.executable, "-m", "src.train"]),
+    ("train model", [sys.executable, "-m", "src.model.train"]),
 ]
 
 

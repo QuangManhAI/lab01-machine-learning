@@ -14,8 +14,8 @@ from src.config import (
     MONGO_COLLECTION,
     MONGO_URI,
 )
-from src.error_logging import run_logged
-from src.preprocess_balance import (
+from src.common.error_logging import run_logged
+from src.data.preprocess_balance import (
     add_preprocessing_columns,
     balance_dataset,
     filter_trainable_rows,

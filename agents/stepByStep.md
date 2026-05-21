@@ -33,21 +33,21 @@
 - `config/corpora_sources.json`: direct download/extract dataset sources.
 - `config/crawler_sources.json`: Scrapy mailing-list crawl sources.
 - `src/config.py`: loads `.env`.
-- `src/error_logging.py`: writes failures to `ERRORS.log`.
+- `src/common/error_logging.py`: writes failures to `ERRORS.log`.
   Also writes progress/info to `PIPELINE.log`.
 - `src/email_spam/settings.py`: Scrapy settings.
 - `src/email_spam/pipelines.py`: saves crawled emails to MongoDB.
-- `src/download_corpora.py`: downloads/extracts SpamAssassin, Kaggle, Hugging Face, and Enron corpora.
+- `src/data/download_corpora.py`: downloads/extracts SpamAssassin, Kaggle, Hugging Face, and Enron corpora.
   Logs download folders, cached files, byte progress, extraction filenames, tabular parsing, and MongoDB save counts.
 - `src/email_spam/spiders/archive_email.py`: crawls LKML and FreeBSD mailing-list pages.
   Logs source start, index parse, discovered email links, queued email URLs, parsed email pages, and archive extraction.
 - `src/email_utils.py`: shared email/text parsing helpers.
-- `src/export_dataset.py`: exports MongoDB records to CSV.
-- `src/check_data.py`: prints MongoDB count and CSV status.
-- `src/eda.py`: creates EDA plots.
-- `src/train.py`: trains TF-IDF + Multinomial Naive Bayes model.
-- `src/predict.py`: predicts one email text.
-- `src/run_pipeline.py`: runs download/extract, crawl, export, EDA, train.
+- `src/data/export_dataset.py`: exports MongoDB records to CSV.
+- `src/data/check_data.py`: prints MongoDB count and CSV status.
+- `src/analysis/eda.py`: creates EDA plots.
+- `src/model/train.py`: trains TF-IDF + Multinomial Naive Bayes model.
+- `src/model/predict.py`: predicts one email text.
+- `src/pipeline/run_pipeline.py`: runs download/extract, crawl, export, EDA, train.
 - `README.md`: user run guide.
 - `stepByStep.md`: this handoff file.
 
@@ -116,7 +116,7 @@ mongod --dbpath data/mongo
 After MongoDB is running:
 
 ```bash
-.venv/bin/python -m src.run_pipeline
+.venv/bin/python -m src.pipeline.run_pipeline
 ```
 
 Watch progress in another terminal:
@@ -134,12 +134,12 @@ tail -f ERRORS.log
 This runs:
 
 ```bash
-.venv/bin/python -m src.download_corpora
+.venv/bin/python -m src.data.download_corpora
 .venv/bin/python -m scrapy crawl archive_email
 .venv/bin/python -m src.validate_crawl
-.venv/bin/python -m src.export_dataset
-.venv/bin/python -m src.eda
-.venv/bin/python -m src.train
+.venv/bin/python -m src.data.export_dataset
+.venv/bin/python -m src.analysis.eda
+.venv/bin/python -m src.model.train
 ```
 
 ## Run One Step
@@ -153,37 +153,37 @@ Crawl:
 Download/extract corpora:
 
 ```bash
-.venv/bin/python -m src.download_corpora
+.venv/bin/python -m src.data.download_corpora
 ```
 
 Export CSV:
 
 ```bash
-.venv/bin/python -m src.export_dataset
+.venv/bin/python -m src.data.export_dataset
 ```
 
 Check data:
 
 ```bash
-.venv/bin/python -m src.check_data
+.venv/bin/python -m src.data.check_data
 ```
 
 EDA:
 
 ```bash
-.venv/bin/python -m src.eda
+.venv/bin/python -m src.analysis.eda
 ```
 
 Train:
 
 ```bash
-.venv/bin/python -m src.train
+.venv/bin/python -m src.model.train
 ```
 
 Predict:
 
 ```bash
-.venv/bin/python -m src.predict "win money now"
+.venv/bin/python -m src.model.predict "win money now"
 ```
 
 ## Outputs
@@ -286,8 +286,8 @@ archive_email
   - AUEB Enron: 500 ham + 500 spam per source, enron1 through enron6.
   - Kaggle/Hugging Face large datasets: 1000 rows per source.
 - Scrapy writes `data/processed/metrics/crawl_summary.json` when it closes.
-- `src.run_pipeline` now validates crawl summary before export/EDA/train, so it does not silently train after a failed or empty crawl.
-- During ingestion, data is first saved in MongoDB. CSV appears only after `src.export_dataset` runs.
+- `src.pipeline.run_pipeline` now validates crawl summary before export/EDA/train, so it does not silently train after a failed or empty crawl.
+- During ingestion, data is first saved in MongoDB. CSV appears only after `src.data.export_dataset` runs.
 - Code style follows the project request: short files, simple flow, no unnecessary comments.
 - Watch progress with `tail -f PIPELINE.log`.
 - Watch failures with `tail -f ERRORS.log`.
@@ -373,7 +373,7 @@ tail -f PIPELINE.log
 3. Download/extract packaged corpora.
 
 ```bash
-.venv/bin/python -m src.download_corpora
+.venv/bin/python -m src.data.download_corpora
 ```
 
 4. Crawl live mailing-list archives.
@@ -385,31 +385,31 @@ tail -f PIPELINE.log
 5. Check MongoDB count.
 
 ```bash
-.venv/bin/python -m src.check_data
+.venv/bin/python -m src.data.check_data
 ```
 
 6. Export raw, cleaned, and balanced CSV files.
 
 ```bash
-.venv/bin/python -m src.export_dataset
+.venv/bin/python -m src.data.export_dataset
 ```
 
 7. Run EDA before processing.
 
 ```bash
-.venv/bin/python -m src.eda --input data/processed/emails_raw.csv --figures reports/figures/before_process --metrics data/processed/metrics/before_process --stage before_process --text-column text
+.venv/bin/python -m src.analysis.eda --input data/processed/emails_raw.csv --figures reports/figures/before_process --metrics data/processed/metrics/before_process --stage before_process --text-column text
 ```
 
 8. Run EDA after strong processing and balancing.
 
 ```bash
-.venv/bin/python -m src.eda --input data/processed/emails.csv --figures reports/figures/after_process --metrics data/processed/metrics/after_process --stage after_process --text-column clean_text
+.venv/bin/python -m src.analysis.eda --input data/processed/emails.csv --figures reports/figures/after_process --metrics data/processed/metrics/after_process --stage after_process --text-column clean_text
 ```
 
 9. Train model.
 
 ```bash
-.venv/bin/python -m src.train
+.venv/bin/python -m src.model.train
 ```
 
 10. Inspect outputs.
@@ -430,7 +430,7 @@ tail -f PIPELINE.log
 
 ## Latest Change: Strong Preprocessing And Dataset Balance
 
-- Added `src/preprocess_balance.py`.
+- Added `src/data/preprocess_balance.py`.
 - It handles:
   - HTML tag removal.
   - `<script>`, `<style>`, and `noscript` removal.
@@ -471,15 +471,15 @@ MIN_CLEAN_CHARS=25
   - clean length boxplots/scatter using `clean_char_count` and `clean_word_count`
 - Train now uses `clean_text` and a stronger stopword list in `TfidfVectorizer`.
 - Predict now cleans input text before calling the saved model.
-- `src.check_data` now prints both balanced CSV and full cleaned CSV.
+- `src.data.check_data` now prints both balanced CSV and full cleaned CSV.
 - Verification commands already run successfully:
 
 ```bash
 .venv/bin/python -m compileall src
-.venv/bin/python -m src.export_dataset
-.venv/bin/python -m src.eda
-.venv/bin/python -m src.train
-.venv/bin/python -m src.check_data
+.venv/bin/python -m src.data.export_dataset
+.venv/bin/python -m src.analysis.eda
+.venv/bin/python -m src.model.train
+.venv/bin/python -m src.data.check_data
 ```
 
 - Current model after balanced clean-text training:
@@ -496,19 +496,19 @@ MIN_CLEAN_CHARS=25
 
 ## Latest Change: Pipeline With Before/After EDA
 
-- `src.run_pipeline` now completes the full flow:
+- `src.pipeline.run_pipeline` now completes the full flow:
 
 ```bash
-.venv/bin/python -m src.download_corpora
+.venv/bin/python -m src.data.download_corpora
 .venv/bin/python -m scrapy crawl archive_email
 .venv/bin/python -m src.validate_crawl
-.venv/bin/python -m src.export_dataset
-.venv/bin/python -m src.eda --input data/processed/emails_raw.csv --figures reports/figures/before_process --metrics data/processed/metrics/before_process --stage before_process --text-column text
-.venv/bin/python -m src.eda --input data/processed/emails.csv --figures reports/figures/after_process --metrics data/processed/metrics/after_process --stage after_process --text-column clean_text
-.venv/bin/python -m src.train
+.venv/bin/python -m src.data.export_dataset
+.venv/bin/python -m src.analysis.eda --input data/processed/emails_raw.csv --figures reports/figures/before_process --metrics data/processed/metrics/before_process --stage before_process --text-column text
+.venv/bin/python -m src.analysis.eda --input data/processed/emails.csv --figures reports/figures/after_process --metrics data/processed/metrics/after_process --stage after_process --text-column clean_text
+.venv/bin/python -m src.model.train
 ```
 
-- `src.export_dataset` now writes:
+- `src.data.export_dataset` now writes:
   - `data/processed/emails_raw.csv`: raw merged dataset before strong processing.
   - `data/processed/emails_full.csv`: full cleaned audit dataset.
   - `data/processed/emails.csv`: cleaned and balanced train/EDA dataset.
@@ -527,16 +527,16 @@ MIN_CLEAN_CHARS=25
   - `data/processed/metrics/before_process/`
   - `data/processed/metrics/after_process/`
 - Root EDA metric files from the old flow were removed to avoid confusion. Model metrics remain in `data/processed/metrics/`.
-- `src.check_data` now prints raw CSV, balanced CSV, and full cleaned CSV.
+- `src.data.check_data` now prints raw CSV, balanced CSV, and full cleaned CSV.
 - Verified commands:
 
 ```bash
 .venv/bin/python -m compileall src
-.venv/bin/python -m src.export_dataset
-.venv/bin/python -m src.eda --input data/processed/emails_raw.csv --figures reports/figures/before_process --metrics data/processed/metrics/before_process --stage before_process --text-column text
-.venv/bin/python -m src.eda --input data/processed/emails.csv --figures reports/figures/after_process --metrics data/processed/metrics/after_process --stage after_process --text-column clean_text
-.venv/bin/python -m src.train
-.venv/bin/python -m src.check_data
+.venv/bin/python -m src.data.export_dataset
+.venv/bin/python -m src.analysis.eda --input data/processed/emails_raw.csv --figures reports/figures/before_process --metrics data/processed/metrics/before_process --stage before_process --text-column text
+.venv/bin/python -m src.analysis.eda --input data/processed/emails.csv --figures reports/figures/after_process --metrics data/processed/metrics/after_process --stage after_process --text-column clean_text
+.venv/bin/python -m src.model.train
+.venv/bin/python -m src.data.check_data
 ```
 
 - Current generated counts:
@@ -544,3 +544,37 @@ MIN_CLEAN_CHARS=25
   - cleaned full CSV: `17582`
   - balanced train/after-process CSV: `8940`
   - balanced labels: `4470 ham`, `4470 spam`
+
+## Latest Change: `src` Refactor
+
+- Refactored the flat `src` folder into responsibility-based packages:
+  - `src/data/`: `download_corpora`, `export_dataset`, `preprocess_balance`, `check_data`.
+  - `src/analysis/`: `eda`.
+  - `src/model/`: `train`, `predict`.
+  - `src/pipeline/`: `run_pipeline`.
+  - `src/common/`: `error_logging`.
+- Removed the old root shim files to avoid duplicate-looking code. Use the real package modules directly:
+
+```bash
+.venv/bin/python -m src.pipeline.run_pipeline
+.venv/bin/python -m src.data.download_corpora
+.venv/bin/python -m src.data.export_dataset
+.venv/bin/python -m src.analysis.eda
+.venv/bin/python -m src.model.train
+.venv/bin/python -m src.model.predict "win money now"
+```
+
+- Internally, `src/pipeline/run_pipeline.py` now calls the real package modules:
+
+```bash
+python -m src.data.download_corpora
+python -m src.data.export_dataset
+python -m src.analysis.eda
+python -m src.model.train
+```
+
+- Verified after refactor:
+
+```bash
+.venv/bin/python -m compileall -q src
+```

@@ -15,7 +15,7 @@ from pymongo import MongoClient, UpdateOne
 
 from src.config import CORPUS_BATCH_SIZE, DB_NAME, DOWNLOAD_TIMEOUT_SECONDS, MONGO_COLLECTION, MONGO_URI
 from src.email_utils import email_item, normalize_label, text_item
-from src.error_logging import run_logged
+from src.common.error_logging import run_logged
 
 CONFIG = Path("config/corpora_sources.json")
 RAW_DIR = Path("data/raw/downloads")

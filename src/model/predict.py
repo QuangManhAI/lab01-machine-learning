@@ -3,8 +3,8 @@ from pathlib import Path
 
 import joblib
 
-from src.error_logging import run_logged
-from src.preprocess_balance import clean_email_text
+from src.common.error_logging import run_logged
+from src.data.preprocess_balance import clean_email_text
 
 
 MODEL = Path("models/spam_nb.joblib")
@@ -13,7 +13,7 @@ MODEL = Path("models/spam_nb.joblib")
 def main():
     text = " ".join(sys.argv[1:]).strip()
     if not text:
-        raise SystemExit("Usage: python -m src.predict \"email text\"")
+        raise SystemExit("Usage: python -m src.model.predict \"email text\"")
     model = joblib.load(MODEL)
     clean_text = clean_email_text(text)
     label = model.predict([clean_text])[0]

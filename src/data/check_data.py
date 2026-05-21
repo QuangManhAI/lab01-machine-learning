@@ -3,7 +3,7 @@ from pathlib import Path
 from pymongo import MongoClient
 
 from src.config import DB_NAME, MONGO_COLLECTION, MONGO_URI
-from src.error_logging import run_logged
+from src.common.error_logging import run_logged
 
 
 def main():

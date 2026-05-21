@@ -1,5 +1,5 @@
 from src.config import CRAWL_DELAY_SECONDS, DB_NAME, MONGO_BATCH_SIZE as CONFIG_MONGO_BATCH_SIZE, MONGO_COLLECTION, MONGO_URI
-from src.error_logging import setup_error_logging
+from src.common.error_logging import setup_error_logging
 
 
 setup_error_logging()
