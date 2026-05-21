@@ -51,7 +51,7 @@ class ArchiveEmailSpider(scrapy.Spider):
 
     def parse_freebsd_year_index(self, response, source):
         self.stats_by_source[source["name"]]["index_pages"] += 1
-        self.logger.info("Parse FreeBSD year index: source=%s url=%s", source["name"], response.url)
+        self.logger.debug("Parse FreeBSD year index: source=%s url=%s", source["name"], response.url)
         archive_pages = []
         for href in response.css("a::attr(href)").getall():
             if re.match(r"[0-9]{8}\.freebsd-[a-z0-9-]+\.html$", href):
@@ -64,19 +64,19 @@ class ArchiveEmailSpider(scrapy.Spider):
             yield from self.queue_url(url, self.parse_html_index, source)
 
     def parse(self, response, source):
-        self.logger.info("Parse archive response: source=%s url=%s bytes=%s", source["name"], response.url, len(response.body))
+        self.logger.debug("Parse archive response: source=%s url=%s bytes=%s", source["name"], response.url, len(response.body))
         items = list(self.read_archive(response.body, response.url))
         self.stats_by_source[source["name"]]["available_items"] += len(items)
         for name, raw in self.select_items(items, source, use_remaining=True):
             if self.source_full(source):
                 break
             self.stats_by_source[source["name"]]["scraped_items"] += 1
-            self.logger.info("Crawled email: source=%s path=%s bytes=%s", source["name"], name, len(raw))
+            self.logger.debug("Crawled email: source=%s path=%s bytes=%s", source["name"], name, len(raw))
             yield email_item(source, response.url, name, raw)
 
     def parse_html_index(self, response, source):
         self.stats_by_source[source["name"]]["index_pages"] += 1
-        self.logger.info("Parse html index: source=%s url=%s", source["name"], response.url)
+        self.logger.debug("Parse html index: source=%s url=%s", source["name"], response.url)
         archive_links = []
         raw_links = []
         html_links = []
@@ -120,22 +120,22 @@ class ArchiveEmailSpider(scrapy.Spider):
             count += 1
             self.stats_by_source[source["name"]]["scraped_items"] += 1
             archive_path = f"{response.url}#{name}"
-            self.logger.info("Parse mbox email: source=%s archive=%s path=%s bytes=%s", source["name"], response.url, name, len(raw))
+            self.logger.debug("Parse mbox email: source=%s archive=%s path=%s bytes=%s", source["name"], response.url, name, len(raw))
             yield email_item(source, response.url, archive_path, raw)
-        self.logger.info("Parsed mbox archive: source=%s url=%s messages=%s", source["name"], response.url, count)
+        self.logger.debug("Parsed mbox archive: source=%s url=%s messages=%s", source["name"], response.url, count)
 
     def parse_raw_email(self, response, source):
         if self.source_full(source):
             return
         self.stats_by_source[source["name"]]["scraped_items"] += 1
-        self.logger.info("Parse raw email: source=%s url=%s bytes=%s", source["name"], response.url, len(response.body))
+        self.logger.debug("Parse raw email: source=%s url=%s bytes=%s", source["name"], response.url, len(response.body))
         yield email_item(source, response.url, response.url, response.body)
 
     def parse_html_email(self, response, source):
         if self.source_full(source):
             return
         self.stats_by_source[source["name"]]["scraped_items"] += 1
-        self.logger.info("Parse html email: source=%s url=%s bytes=%s", source["name"], response.url, len(response.body))
+        self.logger.debug("Parse html email: source=%s url=%s bytes=%s", source["name"], response.url, len(response.body))
         yield email_item(source, response.url, response.url, html_to_email_bytes(response.text))
 
     def queue_url(self, url, callback, source):
@@ -146,7 +146,7 @@ class ArchiveEmailSpider(scrapy.Spider):
         self.seen_urls.add(url)
         self.stats_by_source[source["name"]]["discovered_urls"] += 1
         self.stats_by_source[source["name"]]["queued_urls"] += 1
-        self.logger.info("Queue crawl url: source=%s url=%s", source["name"], url)
+        self.logger.debug("Queue crawl url: source=%s url=%s", source["name"], url)
         yield scrapy.Request(url, callback=callback, cb_kwargs={"source": source})
 
     def is_freebsd_archive_url(self, url):
@@ -190,23 +190,23 @@ class ArchiveEmailSpider(scrapy.Spider):
 
     def read_archive(self, content, url):
         if url.endswith(".gz") or content.startswith(b"\x1f\x8b"):
-            self.logger.info("Decompress crawler gzip response: %s", url)
+            self.logger.debug("Decompress crawler gzip response: %s", url)
             content = gzip.decompress(content)
             url = url.removesuffix(".gz")
         if url.endswith(".mbox") or b"\nFrom " in content[:10000] or content.startswith(b"From "):
-            self.logger.info("Read crawler mbox response: %s", url)
+            self.logger.debug("Read crawler mbox response: %s", url)
             yield from self.read_mbox(content)
             return
         stream = BytesIO(content)
         if url.endswith(".zip"):
-            self.logger.info("Extract crawler zip response: %s", url)
+            self.logger.debug("Extract crawler zip response: %s", url)
             with zipfile.ZipFile(stream) as archive:
                 for name in archive.namelist():
                     if not name.endswith("/"):
                         yield name, archive.read(name)
             return
         mode = "r:*"
-        self.logger.info("Extract crawler tar response: %s", url)
+        self.logger.debug("Extract crawler tar response: %s", url)
         with tarfile.open(fileobj=stream, mode=mode) as archive:
             for member in archive.getmembers():
                 if member.isfile():
@@ -226,4 +226,8 @@ class ArchiveEmailSpider(scrapy.Spider):
         output.parent.mkdir(parents=True, exist_ok=True)
         summary = {"closed_reason": reason, "sources": dict(self.stats_by_source)}
         output.write_text(json.dumps(summary, indent=2, sort_keys=True))
-        self.logger.info("Crawler summary saved: %s summary=%s", output, summary)
+        counts = {
+            source: stats.get("scraped_items", 0)
+            for source, stats in summary["sources"].items()
+        }
+        self.logger.info("Crawler summary saved: %s scraped_by_source=%s", output, counts)

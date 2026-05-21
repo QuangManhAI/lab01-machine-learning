@@ -8,51 +8,58 @@ logger = logging.getLogger(__name__)
 
 
 COMMANDS = [
-    [sys.executable, "-m", "src.download_corpora"],
-    [sys.executable, "-m", "scrapy", "crawl", "archive_email"],
-    [sys.executable, "-m", "src.validate_crawl"],
-    [sys.executable, "-m", "src.export_dataset"],
-    [
-        sys.executable,
-        "-m",
-        "src.eda",
-        "--input",
-        "data/processed/emails_raw.csv",
-        "--figures",
-        "reports/figures/before_process",
-        "--metrics",
-        "data/processed/metrics/before_process",
-        "--stage",
-        "before_process",
-        "--text-column",
-        "text",
-    ],
-    [
-        sys.executable,
-        "-m",
-        "src.eda",
-        "--input",
-        "data/processed/emails.csv",
-        "--figures",
-        "reports/figures/after_process",
-        "--metrics",
-        "data/processed/metrics/after_process",
-        "--stage",
-        "after_process",
-        "--text-column",
-        "clean_text",
-    ],
-    [sys.executable, "-m", "src.train"],
+    ("download corpora", [sys.executable, "-m", "src.download_corpora"]),
+    ("crawl archives", [sys.executable, "-m", "scrapy", "crawl", "archive_email"]),
+    ("validate crawl", [sys.executable, "-m", "src.validate_crawl"]),
+    ("export/process/balance", [sys.executable, "-m", "src.export_dataset"]),
+    (
+        "EDA before process",
+        [
+            sys.executable,
+            "-m",
+            "src.eda",
+            "--input",
+            "data/processed/emails_raw.csv",
+            "--figures",
+            "reports/figures/before_process",
+            "--metrics",
+            "data/processed/metrics/before_process",
+            "--stage",
+            "before_process",
+            "--text-column",
+            "text",
+        ],
+    ),
+    (
+        "EDA after process",
+        [
+            sys.executable,
+            "-m",
+            "src.eda",
+            "--input",
+            "data/processed/emails.csv",
+            "--figures",
+            "reports/figures/after_process",
+            "--metrics",
+            "data/processed/metrics/after_process",
+            "--stage",
+            "after_process",
+            "--text-column",
+            "clean_text",
+        ],
+    ),
+    ("train model", [sys.executable, "-m", "src.train"]),
 ]
 
 
 def main():
-    for command in COMMANDS:
+    for index, (step_name, command) in enumerate(COMMANDS, start=1):
         text = " ".join(command)
-        logger.info("Run pipeline command: %s", text)
-        print(text)
+        logger.info("Pipeline step %s/%s start: %s", index, len(COMMANDS), step_name)
+        logger.debug("Pipeline command: %s", text)
+        print(f"[{index}/{len(COMMANDS)}] {step_name}")
         subprocess.run(command, check=True)
-        logger.info("Finished pipeline command: %s", text)
+        logger.info("Pipeline step %s/%s done: %s", index, len(COMMANDS), step_name)
 
 
 if __name__ == "__main__":

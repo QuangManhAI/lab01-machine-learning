@@ -37,5 +37,5 @@ class MongoPipeline:
         if self.buffer:
             result = self.collection.bulk_write(self.buffer, ordered=False)
             self.saved += result.upserted_count + result.modified_count
-            logger.info("Mongo flush: operations=%s upserted=%s modified=%s total_saved=%s", len(self.buffer), result.upserted_count, result.modified_count, self.saved)
+            logger.debug("Mongo flush: operations=%s upserted=%s modified=%s total_saved=%s", len(self.buffer), result.upserted_count, result.modified_count, self.saved)
             self.buffer = []

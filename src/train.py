@@ -30,7 +30,7 @@ def main():
     logger.info("Train start: data=%s", DATA)
     data = pd.read_csv(DATA).fillna("")
     text_column = "clean_text" if "clean_text" in data.columns else "text"
-    logger.info("Train data loaded: rows=%s labels=%s", len(data), data["label"].value_counts().to_dict())
+    logger.info("Train data: rows=%s labels=%s", len(data), data["label"].value_counts().to_dict())
     train_data, test_data = split_data(data)
     x_train = train_data[text_column]
     y_train = train_data["label"]
@@ -43,14 +43,14 @@ def main():
     baseline.fit(x_train, y_train)
     baseline_predictions = baseline.predict(x_test)
     baseline_accuracy = accuracy_score(y_test, baseline_predictions)
-    logger.info("Baseline complete: accuracy=%s", baseline_accuracy)
+    logger.debug("Baseline complete: accuracy=%s", baseline_accuracy)
 
     model = build_model()
     logger.info("Fit model: TF-IDF + MultinomialNB")
     model.fit(x_train, y_train)
     predictions = model.predict(x_test)
     accuracy = accuracy_score(y_test, predictions)
-    logger.info("Predictions complete: count=%s accuracy=%s", len(predictions), accuracy)
+    logger.info("Train done: accuracy=%s baseline=%s", round(accuracy, 4), round(baseline_accuracy, 4))
 
     METRICS.parent.mkdir(parents=True, exist_ok=True)
     FIGURE.parent.mkdir(parents=True, exist_ok=True)
@@ -61,12 +61,12 @@ def main():
     save_per_source_report(test_data, predictions)
     cross_source = evaluate_cross_source_holdout(data, text_column)
     save_summary_report(data, train_data, test_data, accuracy, baseline_accuracy, report, cross_source, text_column)
-    logger.info("Metrics saved: %s", METRICS)
+    logger.debug("Metrics saved: %s", METRICS)
     ConfusionMatrixDisplay.from_predictions(y_test, predictions)
     plt.tight_layout()
     plt.savefig(FIGURE)
     plt.close()
-    logger.info("Confusion matrix saved: %s", FIGURE)
+    logger.debug("Confusion matrix saved: %s", FIGURE)
     joblib.dump(model, MODEL)
     logger.info("Model saved: %s", MODEL)
 
@@ -81,7 +81,7 @@ def split_data(data):
     source_label = data["source"].astype(str) + "__" + data["label"].astype(str)
     if source_label.value_counts().min() >= 2:
         stratify = source_label
-        logger.info("Using source+label stratified split")
+        logger.debug("Using source+label stratified split")
     else:
         logger.warning("Using label-only stratified split because some source+label groups have fewer than 2 rows")
     return train_test_split(
@@ -114,7 +114,7 @@ def save_split_report(train_data, test_data):
         rows.append(table.reset_index())
     report = pd.concat(rows, ignore_index=True)[["split", "source", "ham", "spam", "total"]]
     report.to_csv(SPLIT_REPORT, index=False)
-    logger.info("Split distribution saved: %s", SPLIT_REPORT)
+    logger.debug("Split distribution saved: %s", SPLIT_REPORT)
 
 
 def save_per_source_report(test_data, predictions):
@@ -139,7 +139,7 @@ def save_per_source_report(test_data, predictions):
             }
         )
     pd.DataFrame(rows).sort_values("rows", ascending=False).to_csv(SOURCE_REPORT, index=False)
-    logger.info("Per-source report saved: %s", SOURCE_REPORT)
+    logger.debug("Per-source report saved: %s", SOURCE_REPORT)
 
 
 def evaluate_cross_source_holdout(data, text_column):
@@ -172,7 +172,7 @@ def evaluate_cross_source_holdout(data, text_column):
         )
     result = pd.DataFrame(rows).sort_values("accuracy")
     result.to_csv(CROSS_SOURCE_REPORT, index=False)
-    logger.info("Cross-source holdout report saved: %s", CROSS_SOURCE_REPORT)
+    logger.debug("Cross-source holdout report saved: %s", CROSS_SOURCE_REPORT)
     return result
 
 
@@ -234,7 +234,7 @@ def save_summary_report(data, train_data, test_data, accuracy, baseline_accuracy
         "- Check `cross_source_holdout_report.csv` for the harsher source-shift test.",
     ]
     SUMMARY_REPORT.write_text("\n".join(lines))
-    logger.info("Model summary saved: %s", SUMMARY_REPORT)
+    logger.debug("Model summary saved: %s", SUMMARY_REPORT)
 
 
 if __name__ == "__main__":

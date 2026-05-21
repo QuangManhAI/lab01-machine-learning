@@ -1,8 +1,10 @@
 import gzip
 import json
 import logging
+import os
 import re
 import tarfile
+import warnings
 import zipfile
 from pathlib import Path
 
@@ -82,11 +84,11 @@ def download_to_file(source):
     url = source["url"]
     path = RAW_DIR / source["name"] / Path(url.split("?")[0]).name
     path.parent.mkdir(parents=True, exist_ok=True)
-    logger.info("Download folder: %s", path.parent)
+    logger.debug("Download folder: %s", path.parent)
     if path.exists() and path.stat().st_size:
-        logger.info("Use cached download: %s bytes=%s", path, path.stat().st_size)
+        logger.info("Use cached corpus: source=%s bytes=%s", source["name"], path.stat().st_size)
         return path
-    logger.info("Downloading: %s -> %s", url, path)
+    logger.info("Download corpus: source=%s", source["name"])
     downloaded = 0
     verify_ssl = source.get("verify_ssl", True)
     if not verify_ssl:
@@ -99,8 +101,8 @@ def download_to_file(source):
                     file.write(chunk)
                     downloaded += len(chunk)
                     if downloaded and downloaded % (25 * 1024 * 1024) < len(chunk):
-                        logger.info("Downloading progress: %s bytes=%s", source["name"], downloaded)
-    logger.info("Downloaded: %s bytes=%s", path, path.stat().st_size)
+                        logger.debug("Downloading progress: %s bytes=%s", source["name"], downloaded)
+    logger.info("Downloaded corpus: source=%s bytes=%s", source["name"], path.stat().st_size)
     return path
 
 
@@ -119,35 +121,35 @@ def request_download(url, verify_ssl):
 
 def read_archive_path(path):
     if is_zip(path):
-        logger.info("Extract zip: %s", path)
+        logger.info("Extract archive: %s", path.name)
         with zipfile.ZipFile(path) as archive:
             for name in archive.namelist():
                 if not name.endswith("/"):
-                    logger.info("Extract file: %s", name)
+                    logger.debug("Extract file: %s", name)
                     yield name, archive.read(name)
         return
     try:
-        logger.info("Extract tar archive: %s", path)
+        logger.info("Extract archive: %s", path.name)
         with tarfile.open(path, mode="r:*") as archive:
             for member in archive.getmembers():
                 if member.isfile():
                     file_obj = archive.extractfile(member)
                     if file_obj:
-                        logger.info("Extract file: %s", member.name)
+                        logger.debug("Extract file: %s", member.name)
                         yield member.name, file_obj.read()
             return
     except tarfile.TarError:
-        logger.info("Not a tar archive, trying raw/gzip/mbox: %s", path)
+        logger.debug("Not a tar archive, trying raw/gzip/mbox: %s", path)
         pass
     content = path.read_bytes()
     if path.suffix == ".gz" or content.startswith(b"\x1f\x8b"):
-        logger.info("Decompress gzip file: %s", path)
+        logger.info("Decompress gzip: %s", path.name)
         content = gzip.decompress(content)
     if looks_like_mbox(content):
-        logger.info("Read mbox content: %s", path)
+        logger.info("Read mbox: %s", path.name)
         yield from read_mbox(content)
         return
-    logger.info("Read single email file: %s", path)
+    logger.debug("Read single email file: %s", path)
     yield path.name, content
 
 
@@ -184,15 +186,20 @@ def kaggle_items(source):
 
     logger.info("Download Kaggle dataset: %s", source["dataset"])
     dataset_path = Path(kagglehub.dataset_download(source["dataset"]))
-    logger.info("Kaggle dataset folder: %s", dataset_path)
+    logger.debug("Kaggle dataset folder: %s", dataset_path)
     yield from tabular_files_items(source, dataset_path)
 
 
 def huggingface_items(source):
+    quiet_huggingface_warnings()
     from datasets import load_dataset
 
     logger.info("Load Hugging Face dataset: %s split=%s", source["dataset"], source.get("split", "train"))
-    dataset = load_dataset(source["dataset"], split=source.get("split", "train"))
+    kwargs = {"split": source.get("split", "train")}
+    token = os.getenv("HF_TOKEN")
+    if token:
+        kwargs["token"] = token
+    dataset = load_dataset(source["dataset"], **kwargs)
     logger.info("Loaded Hugging Face dataset: %s rows=%s", source["dataset"], len(dataset))
     max_items = source.get("max_items")
     for index, row in enumerate(dataset):
@@ -208,12 +215,21 @@ def huggingface_items(source):
             yield item
 
 
+def quiet_huggingface_warnings():
+    os.environ.setdefault("HF_HUB_DISABLE_PROGRESS_BARS", "1")
+    warnings.filterwarnings("ignore", message=r"Repo card metadata block was not found.*")
+    warnings.filterwarnings("ignore", message=r"You are sending unauthenticated requests to the HF Hub.*")
+    logging.getLogger("huggingface_hub").setLevel(logging.ERROR)
+    logging.getLogger("huggingface_hub.repocard").setLevel(logging.ERROR)
+    logging.getLogger("datasets").setLevel(logging.ERROR)
+
+
 def tabular_files_items(source, root):
     files = list(root.rglob("*.csv")) + list(root.rglob("*.json")) + list(root.rglob("*.jsonl")) + list(root.rglob("*.parquet"))
-    logger.info("Scan tabular folder: %s files=%s", root, len(files))
+    logger.info("Scan tabular files: source=%s files=%s", source["name"], len(files))
     for path in files:
         try:
-            logger.info("Read tabular file: %s", path)
+            logger.debug("Read tabular file: %s", path)
             yield from dataframe_items(source, path, read_table(path))
         except Exception:
             logger.exception("Cannot read tabular file: %s", path)
@@ -232,7 +248,7 @@ def read_table(path):
 def dataframe_items(source, path, data):
     text_column = existing_column(data, source.get("text_column"), TEXT_COLUMNS)
     label_column = existing_column(data, source.get("label_column"), LABEL_COLUMNS)
-    logger.info("Parsed table: %s rows=%s text_column=%s label_column=%s", path, len(data), text_column, label_column)
+    logger.info("Parsed table: source_file=%s rows=%s", path.name, len(data))
     max_items = source.get("max_items")
     for index, row in data.iterrows():
         if max_items is not None and index >= max_items:
@@ -285,8 +301,8 @@ def save_items(collection, source, items):
             )
         )
         saved += 1
-        if saved == 1 or saved % 100 == 0:
-            logger.info("Saved emails: source=%s count=%s latest_label=%s", source["name"], saved, item["label"])
+        if saved and saved % 500 == 0:
+            logger.debug("Saved emails: source=%s count=%s latest_label=%s", source["name"], saved, item["label"])
         if len(operations) >= CORPUS_BATCH_SIZE:
             flush_operations(collection, source, operations, saved)
             operations = []
@@ -298,7 +314,7 @@ def flush_operations(collection, source, operations, saved):
     if not operations:
         return
     result = collection.bulk_write(operations, ordered=False)
-    logger.info(
+    logger.debug(
         "Mongo corpus flush: source=%s operations=%s upserted=%s modified=%s seen=%s",
         source["name"],
         len(operations),

@@ -23,7 +23,11 @@ def main():
         message = "Crawler did not collect emails for these sources:\n" + "\n".join(failed)
         logger.error(message)
         raise SystemExit(message)
-    logger.info("Crawl validation passed: %s", summary)
+    counts = {
+        source: stats.get("scraped_items", 0)
+        for source, stats in summary.get("sources", {}).items()
+    }
+    logger.info("Crawl validation passed: sources=%s scraped_by_source=%s", len(counts), counts)
     print(f"Crawl validation passed for {len(summary.get('sources', {}))} sources")
 
 

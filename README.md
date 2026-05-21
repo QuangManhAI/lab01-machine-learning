@@ -68,6 +68,12 @@ CORPUS_BATCH_SIZE=1000
 CRAWL_DELAY_SECONDS=0.5
 ```
 
+Optional Hugging Face token for higher rate limits:
+
+```bash
+HF_TOKEN=your_huggingface_token
+```
+
 Raw crawler data is stored in MongoDB:
 
 ```text

@@ -64,6 +64,7 @@ DOWNLOAD_TIMEOUT_SECONDS=60
 ```
 
 Optional env: `MONGO_COLLECTION`, `MONGO_BATCH_SIZE`.
+Optional Hugging Face env: `HF_TOKEN`.
 Default collection is `raw_emails`.
 Default Scrapy Mongo write batch size is `1`, so crawled emails are saved immediately.
 Default direct corpus Mongo batch size is `1000`, so downloaded/extracted datasets insert fast.

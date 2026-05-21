@@ -43,12 +43,12 @@ def main():
 
     before = len(data)
     data = data[~data["source"].fillna("").str.startswith(EXCLUDED_SOURCE_PREFIXES)]
-    logger.info("Dropped excluded sources: before=%s after=%s prefixes=%s", before, len(data), EXCLUDED_SOURCE_PREFIXES)
+    logger.debug("Dropped excluded sources: before=%s after=%s prefixes=%s", before, len(data), EXCLUDED_SOURCE_PREFIXES)
     raw_data = build_raw_export(data)
     data = add_preprocessing_columns(data)
     before = len(data)
     data = data.drop_duplicates(subset=["clean_text", "label"])
-    logger.info("Dropped duplicates by clean_text+label: before=%s after=%s", before, len(data))
+    logger.debug("Dropped duplicates by clean_text+label: before=%s after=%s", before, len(data))
     trainable_data = filter_trainable_rows(data, MIN_CLEAN_WORDS, MIN_CLEAN_CHARS)
     if BALANCE_DATASET:
         output_data = balance_dataset(
@@ -109,14 +109,14 @@ def main():
     output_data = output_data[columns]
 
     OUTPUT.parent.mkdir(parents=True, exist_ok=True)
-    logger.info("Output folder ready: %s", OUTPUT.parent)
+    logger.debug("Output folder ready: %s", OUTPUT.parent)
     raw_data.to_csv(RAW_OUTPUT, index=False)
     data.to_csv(FULL_OUTPUT, index=False)
     output_data.to_csv(OUTPUT, index=False)
-    logger.info("Raw export finished: rows=%s output=%s", len(raw_data), RAW_OUTPUT)
-    logger.info("Full export finished: rows=%s output=%s", len(data), FULL_OUTPUT)
+    logger.info("Raw export: rows=%s output=%s", len(raw_data), RAW_OUTPUT)
+    logger.info("Clean full export: rows=%s output=%s", len(data), FULL_OUTPUT)
     logger.info(
-        "Balanced export finished: rows=%s labels=%s output=%s",
+        "Balanced export: rows=%s labels=%s output=%s",
         len(output_data),
         output_data["label"].value_counts().to_dict(),
         OUTPUT,
@@ -136,7 +136,7 @@ def build_raw_export(data):
     raw_data["text"] = raw_data[["subject", "body"]].fillna("").agg(" ".join, axis=1)
     before = len(raw_data)
     raw_data = raw_data.drop_duplicates(subset=["text", "label"])
-    logger.info("Raw export duplicates dropped by text+label: before=%s after=%s", before, len(raw_data))
+    logger.debug("Raw export duplicates dropped by text+label: before=%s after=%s", before, len(raw_data))
     return raw_data
 
 

@@ -44,7 +44,7 @@ def prepare_data(data, text_column):
 
 
 def save_label_plot(data):
-    logger.info("Save label plot")
+    logger.debug("Save label plot")
     counts = data["label"].value_counts()
     counts.plot(kind="bar", color=[LABEL_COLORS.get(label, "#586f7c") for label in counts.index])
     plt.title("Email labels")
@@ -56,7 +56,7 @@ def save_label_plot(data):
 
 
 def save_source_plot(data):
-    logger.info("Save source family contribution plot")
+    logger.debug("Save source family contribution plot")
     counts = data["source_family"].value_counts().sort_values()
     height = max(5, len(counts) * 0.45)
     axis = counts.plot(kind="barh", figsize=(10, height), color="#586f7c")
@@ -73,7 +73,7 @@ def save_source_plot(data):
 
 
 def save_source_label_plot(source_label):
-    logger.info("Save source-family label plot")
+    logger.debug("Save source-family label plot")
     plot_data = source_label.sort_values("total").set_index("source_family")[["ham", "spam"]]
     height = max(5, len(plot_data) * 0.45)
     plot_data.plot(kind="barh", stacked=True, figsize=(10, height), color=[LABEL_COLORS["ham"], LABEL_COLORS["spam"]])
@@ -86,7 +86,7 @@ def save_source_label_plot(source_label):
 
 
 def save_wordcloud(data):
-    logger.info("Save overall word cloud")
+    logger.debug("Save overall word cloud")
     save_wordcloud_image(data, "top_words_wordcloud.png", "Most frequent terms", "viridis")
     for label, color_map in [("ham", "Greens"), ("spam", "Reds")]:
         label_data = data[data["label"] == label]
@@ -116,7 +116,7 @@ def save_wordcloud_image(data, filename, title, colormap):
 
 
 def save_text_length_boxplots(data):
-    logger.info("Save text length boxplots")
+    logger.debug("Save text length boxplots")
     fig, axes = plt.subplots(1, 2, figsize=(14, 6))
     data.boxplot(column="analysis_char_count", by="label", ax=axes[0])
     axes[0].set_title("Characters by label")
@@ -137,7 +137,7 @@ def save_text_length_boxplots(data):
 
 
 def save_scatter(data):
-    logger.info("Save text shape scatter")
+    logger.debug("Save text shape scatter")
     sample = data.sample(min(len(data), 6000), random_state=42) if len(data) else data
     plt.figure(figsize=(10, 7))
     for label, group in sample.groupby("label"):
@@ -159,7 +159,7 @@ def save_scatter(data):
 
 
 def save_preprocessing_scatter(data):
-    logger.info("Save raw vs clean length scatter")
+    logger.debug("Save raw vs clean length scatter")
     sample = data.sample(min(len(data), 6000), random_state=42) if len(data) else data
     plt.figure(figsize=(10, 7))
     for label, group in sample.groupby("label"):
@@ -192,7 +192,7 @@ def build_source_label_table(data):
 
 
 def save_data_quality_report(data, source_label):
-    logger.info("Save EDA data quality report")
+    logger.debug("Save EDA data quality report")
     report = [
         f"# Data Quality Report: {STAGE}",
         "",
@@ -233,7 +233,7 @@ def save_data_quality_report(data, source_label):
 
 
 def save_label_reports(data):
-    logger.info("Save separate ham/spam reports")
+    logger.debug("Save separate ham/spam reports")
     for label in ["ham", "spam"]:
         label_data = data[data["label"] == label]
         if label_data.empty:
@@ -310,9 +310,9 @@ def main():
     TEXT_COLUMN = args.text_column
     FIGURES.mkdir(parents=True, exist_ok=True)
     METRICS.mkdir(parents=True, exist_ok=True)
-    logger.info("EDA folders ready: figures=%s metrics=%s stage=%s input=%s", FIGURES, METRICS, STAGE, DATA)
+    logger.info("EDA start: stage=%s input=%s", STAGE, DATA)
     data = prepare_data(pd.read_csv(DATA).fillna(""), TEXT_COLUMN)
-    logger.info(
+    logger.debug(
         "EDA loaded data: rows=%s labels=%s text_column=%s",
         len(data),
         data["label"].value_counts().to_dict(),
@@ -334,7 +334,7 @@ def main():
         save_preprocessing_scatter(data)
     save_data_quality_report(data, source_label)
     save_label_reports(data)
-    logger.info("EDA finished: %s", FIGURES)
+    logger.info("EDA done: stage=%s rows=%s figures=%s", STAGE, len(data), FIGURES)
     print(f"Saved EDA plots to {FIGURES}")
 
 
