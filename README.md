@@ -64,6 +64,7 @@ Install:
 
 ```bash
 python -m venv .venv
+kích hoạt rồi hẵng chạy 
 .venv/bin/python -m pip install -r requirements.txt
 ```
 
