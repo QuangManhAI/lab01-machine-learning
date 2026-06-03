@@ -1,135 +1,39 @@
-# Email Spam Classify
+# Email Spam Classification Lab
 
-Full flow:
+Project code is intentionally kept in `notebooks/`:
 
-1. Download and extract packaged corpora from `config/corpora_sources.json`.
-2. Crawl live mailing-list archives from `config/crawler_sources.json`.
-3. Store all raw emails in local MongoDB.
-4. Export raw, cleaned full, and balanced training CSVs.
-5. Create EDA before processing and after strong processing.
-6. Train a Naive Bayes spam classifier on cleaned balanced text.
+- `notebooks/crawl.py`: download/crawl raw email data into `data/processed/emails_raw.csv`.
+- `notebooks/preprocess.py`: clean text, balance data, build TF-IDF features, train Naive Bayes, and save/predict with the model.
+- `notebooks/model_from_scratch.py`: Naive Bayes from scratch, sklearn double-check, model comparison, save/load, and prediction helpers.
+- `notebooks/eda.py`: EDA tables, report metrics, top tokens, per-source scores, and cross-source holdout checks.
+- `notebooks/lab01.ipynb`: report notebook that calls the Python files above.
 
-Progress is written to `PIPELINE.log`.
-Errors are written to `ERRORS.log`.
+Existing `data/`, `models/`, and `reports/` folders contain generated outputs used by the notebook.
 
-Direct download/extract sources include:
-
-- SpamAssassin public corpus spam and ham archives
-- Kaggle datasets
-- Hugging Face datasets
-- AUEB Enron-Spam datasets, enron1 through enron6
-
-Scrapy sources include:
-
-- LKML archive pages
-- FreeBSD 2025 yearly mailing-list indexes, sampled across weekly archives
-
-Crawler sources use a balanced trial sample by default. Large archive pages are sampled evenly across the whole page instead of taking only the first messages, and the spider writes `data/processed/metrics/crawl_summary.json` when it closes.
-
-The `reports/` folder is image-only. Tables, text reports, and JSON summaries go under `data/processed/metrics/`.
-
-Source layout:
-
-- `src/data/`: corpus download, Mongo export, strong preprocessing, balancing, data checks.
-- `src/analysis/`: before/after EDA generation.
-- `src/model/`: train and predict with the saved Naive Bayes pipeline.
-- `src/pipeline/`: full-flow orchestration.
-- `src/common/`: shared logging setup.
-
-Export outputs:
-
-- `data/processed/emails_raw.csv`: merged raw export before strong processing, used for before-process EDA.
-- `data/processed/emails_full.csv`: full cleaned export for audit.
-- `data/processed/emails.csv`: cleaned and balanced dataset used by after-process EDA and training.
-- `data/processed/metrics/preprocessing_balance_report.md`: cleaning and balance summary.
-
-EDA outputs:
-
-- `reports/figures/before_process/`: raw EDA images before strong processing and balancing.
-- `reports/figures/after_process/`: EDA images after strong processing and balancing.
-- `data/processed/metrics/before_process/`: raw EDA tables/text summaries.
-- `data/processed/metrics/after_process/`: processed EDA tables/text summaries.
-
-Balancing is controlled by `.env`:
+## Install
 
 ```bash
-BALANCE_DATASET=true
-BALANCE_MAX_PER_SOURCE_FAMILY=1000
-BALANCE_RANDOM_SEED=42
-MIN_CLEAN_WORDS=5
-MIN_CLEAN_CHARS=25
-```
-
-Install:
-
-```bash
-python -m venv .venv
-kích hoạt rồi hẵng chạy 
 .venv/bin/python -m pip install -r requirements.txt
 ```
 
-Configure local MongoDB in `.env`:
+## Crawl Raw Data
 
 ```bash
-MONGO_URI=mongodb://localhost:27017
-DB_NAME=email_spam_lab
-CORPUS_BATCH_SIZE=1000
-CRAWL_DELAY_SECONDS=0.5
+.venv/bin/python notebooks/crawl.py
 ```
 
-Optional Hugging Face token for higher rate limits:
+To skip live mailing-list crawling and use configured corpora only:
 
 ```bash
-HF_TOKEN=your_huggingface_token
+.venv/bin/python notebooks/crawl.py --no-live
 ```
 
-Raw crawler data is stored in MongoDB:
+## Run The Lab
+
+Open and run:
 
 ```text
-email_spam_lab.raw_emails
+notebooks/lab01.ipynb
 ```
 
-Check where data is:
-
-```bash
-.venv/bin/python -m src.data.check_data
-```
-
-Watch logs:
-
-```bash
-tail -f PIPELINE.log
-tail -f ERRORS.log
-```
-
-Start MongoDB:
-
-```bash
-mkdir -p data/mongo
-mongod --dbpath data/mongo
-```
-
-Run all:
-
-```bash
-.venv/bin/python -m src.pipeline.run_pipeline
-```
-
-Run one step:
-
-```bash
-.venv/bin/python -m src.data.download_corpora
-.venv/bin/python -m scrapy crawl archive_email
-.venv/bin/python -m src.validate_crawl
-.venv/bin/python -m src.data.check_data
-.venv/bin/python -m src.data.export_dataset
-.venv/bin/python -m src.analysis.eda --input data/processed/emails_raw.csv --figures reports/figures/before_process --metrics data/processed/metrics/before_process --stage before_process --text-column text
-.venv/bin/python -m src.analysis.eda --input data/processed/emails.csv --figures reports/figures/after_process --metrics data/processed/metrics/after_process --stage after_process --text-column clean_text
-.venv/bin/python -m src.model.train
-```
-
-Predict:
-
-```bash
-.venv/bin/python -m src.model.predict "win money now"
-```
+The notebook loads existing processed CSVs, demonstrates preprocessing, trains Naive Bayes from scratch and with sklearn for double-checking, evaluates the model, and saves/reuses the trained classifier.
