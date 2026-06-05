@@ -5,14 +5,17 @@ from pathlib import Path
 import joblib
 import numpy as np
 import pandas as pd
+from sklearn.calibration import CalibratedClassifierCV
+from sklearn.base import clone
 from sklearn.dummy import DummyClassifier
 from sklearn.feature_extraction.text import TfidfVectorizer
 from sklearn.linear_model import LogisticRegression
-from sklearn.metrics import accuracy_score, classification_report, precision_recall_fscore_support
+from sklearn.metrics import accuracy_score, auc, classification_report, confusion_matrix, precision_recall_fscore_support, roc_curve
 from sklearn.model_selection import train_test_split
 from sklearn.naive_bayes import MultinomialNB
 from sklearn.pipeline import Pipeline
 from sklearn.svm import LinearSVC
+from sklearn.utils.class_weight import compute_sample_weight
 
 import preprocess
 
@@ -274,6 +277,153 @@ class SklearnModelChecker:
                 }
             )
         return pd.DataFrame(rows).sort_values("macro_f1", ascending=False)
+
+    def split_train_validation_test(
+        self,
+        data: pd.DataFrame,
+        validation_size: float = 0.2,
+        test_size: float = 0.2,
+        random_state: int = 42,
+    ) -> tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame]:
+        train_validation, test = train_test_split(
+            data,
+            test_size=test_size,
+            random_state=random_state,
+            stratify=data["label"],
+        )
+        validation_fraction = validation_size / (1 - test_size)
+        train, validation = train_test_split(
+            train_validation,
+            test_size=validation_fraction,
+            random_state=random_state,
+            stratify=train_validation["label"],
+        )
+        return train.reset_index(drop=True), validation.reset_index(drop=True), test.reset_index(drop=True)
+
+    def threshold_experiment_specs(
+        self,
+        train_pool: pd.DataFrame,
+        text_column: str,
+        random_state: int = 42,
+    ) -> list[dict]:
+        strategies = [
+            ("Unbalanced", train_pool.reset_index(drop=True), "none"),
+            ("Downsample balanced", preprocess.balance_dataset(train_pool, random_seed=random_state), "none"),
+            ("Weighted balanced", train_pool.reset_index(drop=True), "weighted"),
+        ]
+        specs = []
+        for strategy_name, train_frame, balance_mode in strategies:
+            weighted = balance_mode == "weighted"
+            estimators = {
+                "Naive Bayes": MultinomialNB(alpha=1.0),
+                "Logistic Regression": LogisticRegression(max_iter=1000, class_weight="balanced" if weighted else None),
+                "Linear SVM": CalibratedClassifierCV(
+                    estimator=LinearSVC(class_weight="balanced" if weighted else None),
+                    method="sigmoid",
+                    cv=3,
+                ),
+            }
+            for model_name, estimator in estimators.items():
+                fit_params = {}
+                if weighted and model_name == "Naive Bayes":
+                    fit_params["model__sample_weight"] = compute_sample_weight("balanced", train_frame["label"])
+                specs.append(
+                    {
+                        "training_strategy": strategy_name,
+                        "model": model_name,
+                        "text_column": text_column,
+                        "train_frame": train_frame,
+                        "pipeline": Pipeline([("tfidf", self.make_tfidf_vectorizer()), ("model", clone(estimator))]),
+                        "fit_params": fit_params,
+                    }
+                )
+        return specs
+
+    def positive_scores(self, pipeline: Pipeline, texts, positive_label: str = "spam") -> tuple[np.ndarray, str]:
+        estimator = pipeline.named_steps["model"]
+        if hasattr(pipeline, "predict_proba"):
+            class_index = list(estimator.classes_).index(positive_label)
+            return pipeline.predict_proba(texts)[:, class_index], "probability"
+        return pipeline.decision_function(texts), "decision_score"
+
+    def threshold_summary(
+        self,
+        labels,
+        scores,
+        target_fpr: float = 0.01,
+        target_tpr: float = 0.99,
+        positive_label: str = "spam",
+    ) -> dict:
+        y_true = (pd.Series(labels).reset_index(drop=True) == positive_label).astype(int)
+        fpr, tpr, thresholds = roc_curve(y_true, scores)
+        survey = pd.DataFrame({"threshold": thresholds, "FPR": fpr, "TPR": tpr})
+        survey = survey.replace([np.inf, -np.inf], np.nan).dropna(subset=["threshold"]).copy()
+        survey["distance_to_target"] = ((survey["FPR"] - target_fpr) ** 2 + (survey["TPR"] - target_tpr) ** 2) ** 0.5
+        under_fpr = survey[survey["FPR"] <= target_fpr]
+        if under_fpr.empty:
+            best_under_fpr = survey.sort_values(["FPR", "TPR"], ascending=[True, False]).iloc[0]
+        else:
+            best_under_fpr = under_fpr.sort_values(["TPR", "FPR"], ascending=[False, False]).iloc[0]
+        tpr_target_rows = survey[survey["TPR"] >= target_tpr]
+        lowest_fpr_at_target_tpr = (
+            tpr_target_rows.sort_values(["FPR", "TPR"], ascending=[True, False]).iloc[0] if not tpr_target_rows.empty else None
+        )
+        closest = survey.sort_values("distance_to_target").iloc[0]
+        return {
+            "threshold": best_under_fpr["threshold"],
+            "validation_fpr_at_threshold": best_under_fpr["FPR"],
+            "validation_tpr_at_threshold": best_under_fpr["TPR"],
+            "closest_threshold": closest["threshold"],
+            "closest_validation_fpr": closest["FPR"],
+            "closest_validation_tpr": closest["TPR"],
+            "threshold_for_tpr_target": (
+                lowest_fpr_at_target_tpr["threshold"] if lowest_fpr_at_target_tpr is not None else np.nan
+            ),
+            "validation_fpr_at_tpr_target": (
+                lowest_fpr_at_target_tpr["FPR"] if lowest_fpr_at_target_tpr is not None else np.nan
+            ),
+            "validation_tpr_at_tpr_target": (
+                lowest_fpr_at_target_tpr["TPR"] if lowest_fpr_at_target_tpr is not None else np.nan
+            ),
+            "can_reach_target_on_validation": bool(((survey["FPR"] <= target_fpr) & (survey["TPR"] >= target_tpr)).any()),
+            "roc_fpr": fpr,
+            "roc_tpr": tpr,
+            "roc_auc": auc(fpr, tpr),
+        }
+
+    def metrics_at_threshold(
+        self,
+        labels,
+        scores,
+        threshold: float,
+        positive_label: str = "spam",
+    ) -> dict:
+        y_true = (pd.Series(labels).reset_index(drop=True) == positive_label).astype(int)
+        y_pred = (np.asarray(scores) >= threshold).astype(int)
+        tn, fp, fn, tp = confusion_matrix(y_true, y_pred, labels=[0, 1]).ravel()
+        total = tn + fp + fn + tp
+        accuracy = (tp + tn) / total if total else 0
+        precision = tp / (tp + fp) if (tp + fp) else 0
+        recall = tp / (tp + fn) if (tp + fn) else 0
+        fpr = fp / (fp + tn) if (fp + tn) else 0
+        fnr = fn / (fn + tp) if (fn + tp) else 0
+        tnr = tn / (tn + fp) if (tn + fp) else 0
+        balanced_accuracy = (recall + tnr) / 2
+        assert abs(accuracy - accuracy_score(y_true, y_pred)) < 1e-12
+        return {
+            "TN": int(tn),
+            "FP": int(fp),
+            "FN": int(fn),
+            "TP": int(tp),
+            "accuracy": accuracy,
+            "precision": precision,
+            "recall": recall,
+            "TPR": recall,
+            "FPR": fpr,
+            "FNR": fnr,
+            "TNR": tnr,
+            "balanced_accuracy": balanced_accuracy,
+        }
 
     def evaluate_cross_source_holdout(self, data: pd.DataFrame, text_column: str) -> pd.DataFrame:
         rows = []
