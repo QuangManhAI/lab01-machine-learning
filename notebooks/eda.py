@@ -107,12 +107,56 @@ def plot_text_shape_scatter(data: pd.DataFrame, title: str = "Email length shape
 
 
 def plot_top_terms(data: pd.DataFrame, title: str = "Top terms", text_column: str = "clean_text", max_features: int = 20) -> None:
-    terms = top_terms(data, text_column=text_column, max_features=max_features).sort_values("count")
-    plt.figure(figsize=(10, 6))
-    plt.barh(terms["term"], terms["count"], color="#586f7c")
-    plt.title(title)
-    plt.xlabel("Count")
-    plt.ylabel("Term")
+    fig, axes = plt.subplots(1, 2, figsize=(14, 6), sharex=False)
+
+    for axis, label in zip(axes, ["ham", "spam"]):
+        label_data = data[data["label"] == label]
+        if label_data.empty:
+            axis.set_title(f"{title}: {label}")
+            axis.text(0.5, 0.5, f"No {label} rows", ha="center", va="center", transform=axis.transAxes)
+            axis.set_axis_off()
+            continue
+
+        terms = top_terms(label_data, text_column=text_column, max_features=max_features).sort_values("count")
+        axis.barh(terms["term"], terms["count"], color=LABEL_COLORS[label])
+        axis.set_title(f"{title}: {label}")
+        axis.set_xlabel("Count")
+        axis.set_ylabel("Term")
+
+    fig.suptitle(title, y=1.02)
+    plt.tight_layout()
+    plt.show()
+
+
+def plot_term_frequency_histogram(
+    data: pd.DataFrame,
+    title: str = "Term frequency distribution",
+    text_column: str = "clean_text",
+    max_features: int | None = None,
+    bins: int = 30,
+) -> None:
+    fig, axes = plt.subplots(1, 2, figsize=(14, 5.5), sharey=True)
+
+    for axis, label in zip(axes, ["ham", "spam"]):
+        label_data = data[data["label"] == label]
+        if label_data.empty:
+            axis.set_title(f"{title}: {label}")
+            axis.text(0.5, 0.5, f"No {label} rows", ha="center", va="center", transform=axis.transAxes)
+            axis.set_axis_off()
+            continue
+
+        vectorizer = CountVectorizer(stop_words=preprocess.stop_words_for_vectorizer(), max_features=max_features)
+        matrix = vectorizer.fit_transform(label_data[text_column].fillna(""))
+        term_counts = matrix.sum(axis=0).A1
+
+        axis.hist(term_counts, bins=bins, color=LABEL_COLORS[label], alpha=0.85)
+        axis.set_title(f"{title}: {label}")
+        axis.set_xlabel("Count per term")
+        axis.set_ylabel("Number of terms")
+        axis.set_xscale("log")
+        axis.set_yscale("log")
+
+    fig.suptitle(title, y=1.02)
     plt.tight_layout()
     plt.show()
 
@@ -122,6 +166,7 @@ def plot_eda_overview(data: pd.DataFrame, title_prefix: str) -> None:
     plot_source_label_distribution(data, f"{title_prefix}: ham/spam by source family")
     plot_text_shape_scatter(data, f"{title_prefix}: text length shape")
     plot_top_terms(data, f"{title_prefix}: top terms")
+    plot_term_frequency_histogram(data, f"{title_prefix}: term frequency distribution")
 
 
 def figure_files(after_figures: Path) -> list[Path]:

@@ -6,6 +6,7 @@ import re
 from html.parser import HTMLParser
 from pathlib import Path
 
+import matplotlib.pyplot as plt
 import pandas as pd
 from sklearn.feature_extraction.text import ENGLISH_STOP_WORDS
 from sklearn.model_selection import train_test_split
@@ -203,6 +204,97 @@ def processed_sample(data: pd.DataFrame, rows: int = 3, random_state: int = 42) 
 
 def example_cleaning() -> tuple[str, str]:
     return EXAMPLE_EMAIL.strip(), clean_email_text(EXAMPLE_EMAIL)
+
+
+def missing_data_summary(data: pd.DataFrame) -> pd.DataFrame:
+    total_rows = len(data)
+    missing_count = data.isna().sum()
+    missing_percent = (missing_count / total_rows * 100) if total_rows else missing_count.astype(float)
+    return (
+        pd.DataFrame(
+            {
+                "column": missing_count.index,
+                "missing_count": missing_count.values,
+                "missing_percent": missing_percent.round(2).values,
+                "dtype": [str(dtype) for dtype in data.dtypes],
+            }
+        )
+        .sort_values(["missing_count", "column"], ascending=[False, True])
+        .reset_index(drop=True)
+    )
+
+
+def plot_missing_data(data: pd.DataFrame, title: str = "Missing data by column", include_zero: bool = True) -> None:
+    summary = missing_data_summary(data)
+    plot_data = summary if include_zero else summary[summary["missing_count"] > 0]
+    plot_data = plot_data.sort_values("missing_count", ascending=True)
+
+    height = max(4, len(plot_data) * 0.35)
+    plt.figure(figsize=(10, height))
+
+    if plot_data.empty:
+        plt.text(0.5, 0.5, "No missing values", ha="center", va="center")
+        plt.axis("off")
+        plt.title(title)
+        plt.show()
+        return
+
+    bars = plt.barh(plot_data["column"], plot_data["missing_count"], color="#586f7c")
+    max_count = max(int(plot_data["missing_count"].max()), 1)
+    plt.xlim(0, max_count * 1.12)
+    for bar, percent in zip(bars, plot_data["missing_percent"]):
+        width = bar.get_width()
+        plt.text(width + max_count * 0.01, bar.get_y() + bar.get_height() / 2, f"{int(width)} ({percent:.2f}%)", va="center")
+
+    plt.title(title)
+    plt.xlabel("Missing rows")
+    plt.ylabel("Column")
+    plt.tight_layout()
+    plt.show()
+
+
+def duplicate_data_summary(data: pd.DataFrame, subset: list[str] | None = None) -> pd.DataFrame:
+    duplicate_mask = data.duplicated(subset=subset, keep="first")
+    duplicate_rows = int(duplicate_mask.sum())
+    total_rows = len(data)
+    unique_rows = total_rows - duplicate_rows
+    subset_label = "all columns" if subset is None else ", ".join(subset)
+    return pd.DataFrame(
+        [
+            {
+                "subset": subset_label,
+                "total_rows": total_rows,
+                "unique_rows": unique_rows,
+                "duplicate_rows": duplicate_rows,
+                "duplicate_percent": round((duplicate_rows / total_rows * 100) if total_rows else 0, 2),
+            }
+        ]
+    )
+
+
+def plot_duplicate_data(data: pd.DataFrame, title: str = "Duplicate rows", subset: list[str] | None = None) -> None:
+    summary = duplicate_data_summary(data, subset=subset).iloc[0]
+    counts = pd.Series(
+        {
+            "Unique rows": int(summary["unique_rows"]),
+            "Duplicate rows": int(summary["duplicate_rows"]),
+        }
+    )
+
+    plt.figure(figsize=(7, 4.5))
+    bars = plt.bar(counts.index, counts.values, color=["#2d6a4f", "#b23a48"])
+    max_count = max(int(counts.max()), 1)
+    plt.ylim(0, max_count * 1.12)
+    for bar in bars:
+        height = bar.get_height()
+        percent = (height / summary["total_rows"] * 100) if summary["total_rows"] else 0
+        plt.text(bar.get_x() + bar.get_width() / 2, height + max_count * 0.02, f"{int(height)} ({percent:.2f}%)", ha="center")
+
+    plt.title(title)
+    plt.xlabel("Row type")
+    plt.ylabel("Rows")
+    plt.tight_layout()
+    plt.show()
 
 
 def raw_to_clean_sample(raw_data: pd.DataFrame, rows: int = 5) -> pd.DataFrame:
