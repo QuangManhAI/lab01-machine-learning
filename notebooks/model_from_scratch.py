@@ -8,7 +8,7 @@ import pandas as pd
 from sklearn.calibration import CalibratedClassifierCV
 from sklearn.base import clone
 from sklearn.dummy import DummyClassifier
-from sklearn.feature_extraction.text import TfidfVectorizer
+from sklearn.feature_extraction.text import CountVectorizer, TfidfVectorizer
 from sklearn.linear_model import LogisticRegression
 from sklearn.metrics import accuracy_score, auc, classification_report, confusion_matrix, precision_recall_fscore_support, roc_curve
 from sklearn.model_selection import train_test_split
@@ -145,7 +145,13 @@ class SklearnModelChecker:
         self.fitted_models_: dict[str, object] = {}
 
     def make_tfidf_vectorizer(self) -> TfidfVectorizer:
-        return TfidfVectorizer(stop_words=preprocess.stop_words_for_vectorizer(), min_df=2, ngram_range=(1, 2))
+        return TfidfVectorizer(
+            stop_words=preprocess.stop_words_for_vectorizer(),
+            min_df=2,
+            max_df=0.95,
+            ngram_range=(1, 2),
+            sublinear_tf=True
+        )
 
     def build_model(self) -> Pipeline:
         return Pipeline([("tfidf", self.make_tfidf_vectorizer()), ("nb", MultinomialNB())])
@@ -425,6 +431,124 @@ class SklearnModelChecker:
             "balanced_accuracy": balanced_accuracy,
         }
 
+    def error_analysis_frame(
+        self,
+        frame: pd.DataFrame,
+        scores,
+        threshold: float,
+        positive_label: str = "spam",
+        text_column: str = "clean_text",
+    ) -> pd.DataFrame:
+        analysis = frame.copy().reset_index(drop=True)
+        analysis["score"] = np.asarray(scores)
+        analysis["prediction"] = np.where(analysis["score"] >= threshold, positive_label, "ham")
+        analysis["is_error"] = analysis["label"] != analysis["prediction"]
+        analysis["error_type"] = "correct"
+        analysis.loc[(analysis["label"] == "ham") & (analysis["prediction"] == positive_label), "error_type"] = "FP"
+        analysis.loc[(analysis["label"] == positive_label) & (analysis["prediction"] == "ham"), "error_type"] = "FN"
+        analysis["threshold_distance"] = (analysis["score"] - threshold).abs()
+        text_source = text_column if text_column in analysis.columns else "text"
+        analysis["snippet"] = analysis[text_source].fillna("").astype(str).str.slice(0, 180)
+        return analysis
+
+    def source_label_confounding(self, data: pd.DataFrame) -> pd.DataFrame:
+        table = pd.crosstab(data["source_family"], data["label"])
+        for label in ["ham", "spam"]:
+            if label not in table.columns:
+                table[label] = 0
+        table = table[["ham", "spam"]]
+        table["total"] = table.sum(axis=1)
+        table["spam_rate"] = table["spam"] / table["total"]
+        table["source_profile"] = np.select(
+            [
+                (table["ham"] > 0) & (table["spam"] == 0),
+                (table["spam"] > 0) & (table["ham"] == 0),
+                (table["spam_rate"] <= 0.1),
+                (table["spam_rate"] >= 0.9),
+            ],
+            ["ham-only", "spam-only", "mostly-ham", "mostly-spam"],
+            default="mixed",
+        )
+        return table.reset_index().sort_values(["source_profile", "total"], ascending=[True, False])
+
+    def source_error_summary(self, error_frame: pd.DataFrame) -> pd.DataFrame:
+        rows = []
+        for source_family, group in error_frame.groupby("source_family"):
+            ham_rows = group[group["label"] == "ham"]
+            spam_rows = group[group["label"] == "spam"]
+            fp = int((group["error_type"] == "FP").sum())
+            fn = int((group["error_type"] == "FN").sum())
+            tp = int(((group["label"] == "spam") & (group["prediction"] == "spam")).sum())
+            tn = int(((group["label"] == "ham") & (group["prediction"] == "ham")).sum())
+            rows.append(
+                {
+                    "source_family": source_family,
+                    "rows": len(group),
+                    "ham_rows": len(ham_rows),
+                    "spam_rows": len(spam_rows),
+                    "FP": fp,
+                    "FN": fn,
+                    "TP": tp,
+                    "TN": tn,
+                    "FPR": fp / len(ham_rows) if len(ham_rows) else 0,
+                    "FNR": fn / len(spam_rows) if len(spam_rows) else 0,
+                    "TPR": tp / len(spam_rows) if len(spam_rows) else 0,
+                }
+            )
+        return pd.DataFrame(rows).sort_values(["FP", "FN", "rows"], ascending=[False, False, False])
+
+    def score_overlap_summary(self, error_frame: pd.DataFrame, threshold: float, window: float = 0.05) -> pd.DataFrame:
+        near = error_frame[(error_frame["score"] >= threshold - window) & (error_frame["score"] <= threshold + window)]
+        rows = []
+        for label, group in error_frame.groupby("label"):
+            near_group = near[near["label"] == label]
+            rows.append(
+                {
+                    "label": label,
+                    "rows": len(group),
+                    "near_threshold_rows": len(near_group),
+                    "near_threshold_rate": len(near_group) / len(group) if len(group) else 0,
+                    "score_min": group["score"].min(),
+                    "score_median": group["score"].median(),
+                    "score_max": group["score"].max(),
+                }
+            )
+        return pd.DataFrame(rows)
+
+    def conflicting_clean_texts(self, data: pd.DataFrame, text_column: str = "clean_text", top_n: int = 20) -> pd.DataFrame:
+        grouped = (
+            data.dropna(subset=[text_column])
+            .groupby(text_column)
+            .agg(
+                rows=("label", "size"),
+                labels=("label", lambda values: ",".join(sorted(set(values)))),
+                sources=("source_family", lambda values: ",".join(sorted(set(map(str, values)))[:5])),
+            )
+            .reset_index()
+        )
+        conflicts = grouped[grouped["labels"].str.contains(",")].copy()
+        conflicts["text_preview"] = conflicts[text_column].str.slice(0, 180)
+        return conflicts.sort_values("rows", ascending=False).head(top_n)[["rows", "labels", "sources", "text_preview"]]
+
+    def top_error_tokens(
+        self,
+        error_frame: pd.DataFrame,
+        error_type: str,
+        text_column: str = "clean_text",
+        top_n: int = 20,
+    ) -> pd.DataFrame:
+        subset = error_frame[error_frame["error_type"] == error_type]
+        if subset.empty:
+            return pd.DataFrame(columns=["error_type", "token", "count"])
+        vectorizer = CountVectorizer(stop_words=preprocess.stop_words_for_vectorizer(), max_features=top_n)
+        matrix = vectorizer.fit_transform(subset[text_column].fillna(""))
+        counts = matrix.sum(axis=0).A1
+        return (
+            pd.DataFrame({"error_type": error_type, "token": vectorizer.get_feature_names_out(), "count": counts})
+            .sort_values("count", ascending=False)
+            .reset_index(drop=True)
+        )
+
     def evaluate_cross_source_holdout(self, data: pd.DataFrame, text_column: str) -> pd.DataFrame:
         rows = []
         for source, holdout in data.groupby("source"):
@@ -466,3 +590,106 @@ class SklearnModelChecker:
         if hasattr(deployed_model, "predict_proba"):
             table["confidence"] = deployed_model.predict_proba(clean_new_emails).max(axis=1).round(4)
         return table
+
+    def run_threshold_experiment(
+        self,
+        train_modes: dict[str, pd.DataFrame],
+        validation_frame: pd.DataFrame,
+        test_frame: pd.DataFrame,
+        text_column: str,
+        target_fpr: float = 0.01,
+        target_tpr: float = 0.99,
+        positive_label: str = "spam",
+    ) -> tuple[pd.DataFrame, list[dict], list[dict]]:
+        from sklearn.pipeline import Pipeline
+        from sklearn.base import clone
+        from sklearn.calibration import CalibratedClassifierCV
+        from sklearn.svm import LinearSVC
+        from sklearn.linear_model import LogisticRegression
+        from sklearn.naive_bayes import MultinomialNB
+        
+        estimators = {
+            "Naive Bayes": MultinomialNB(alpha=1.0),
+            "Logistic Regression": LogisticRegression(max_iter=1000),
+            "Logistic Regression (C=0.5, balanced)": LogisticRegression(C=0.5, max_iter=1000, class_weight='balanced'),
+            "Linear SVM (Calibrated)": CalibratedClassifierCV(estimator=LinearSVC(dual='auto'), method="sigmoid", cv=3),
+            "Linear SVM (Raw)": LinearSVC(C=1.0, dual='auto', max_iter=2000),
+        }
+        
+        rows = []
+        roc_curves = []
+        confusion_matrices = []
+        specs_out = []
+        
+        for strategy_name, train_frame in train_modes.items():
+            for model_name, estimator in estimators.items():
+                pipeline = Pipeline([("tfidf", self.make_tfidf_vectorizer()), ("model", clone(estimator))])
+                pipeline.fit(train_frame[text_column], train_frame["label"])
+                
+                val_scores, score_type = self.positive_scores(pipeline, validation_frame[text_column], positive_label)
+                threshold_info = self.threshold_summary(
+                    validation_frame["label"],
+                    val_scores,
+                    target_fpr=target_fpr,
+                    target_tpr=target_tpr,
+                    positive_label=positive_label,
+                )
+                test_scores, _ = self.positive_scores(pipeline, test_frame[text_column], positive_label)
+                test_metrics = self.metrics_at_threshold(
+                    test_frame["label"],
+                    test_scores,
+                    threshold=threshold_info["threshold"],
+                    positive_label=positive_label,
+                )
+                
+                row = {
+                    "training_strategy": strategy_name,
+                    "model": model_name,
+                    "score_type": score_type,
+                    "train_rows": len(train_frame),
+                    "ham_train": int((train_frame["label"] == "ham").sum()),
+                    "spam_train": int((train_frame["label"] == "spam").sum()),
+                    "validation_rows": len(validation_frame),
+                    "test_rows": len(test_frame),
+                    "selected_threshold": threshold_info["threshold"],
+                    "validation_FPR": threshold_info["validation_fpr_at_threshold"],
+                    "validation_TPR": threshold_info["validation_tpr_at_threshold"],
+                    "validation_AUC": threshold_info["roc_auc"],
+                    "can_reach_99_1_on_validation": threshold_info["can_reach_target_on_validation"],
+                    "closest_threshold": threshold_info["closest_threshold"],
+                    "closest_validation_FPR": threshold_info["closest_validation_fpr"],
+                    "closest_validation_TPR": threshold_info["closest_validation_tpr"],
+                    **test_metrics,
+                }
+                rows.append(row)
+                roc_curves.append({
+                    "training_strategy": strategy_name,
+                    "model": model_name,
+                    "fpr": threshold_info["roc_fpr"],
+                    "tpr": threshold_info["roc_tpr"],
+                    "auc": threshold_info["roc_auc"],
+                    "selected_validation_FPR": threshold_info["validation_fpr_at_threshold"],
+                    "selected_validation_TPR": threshold_info["validation_tpr_at_threshold"],
+                })
+                confusion_matrices.append({
+                    "training_strategy": strategy_name,
+                    "model": model_name,
+                    "matrix": np.array([[test_metrics["TN"], test_metrics["FP"]], [test_metrics["FN"], test_metrics["TP"]]]),
+                })
+                specs_out.append({
+                    "training_strategy": strategy_name,
+                    "model": model_name,
+                    "text_column": text_column,
+                    "train_frame": train_frame,
+                    "pipeline": pipeline,
+                    "fit_params": {}
+                })
+        
+        results = pd.DataFrame(rows)
+        round_columns = [
+            "selected_threshold", "validation_FPR", "validation_TPR", "validation_AUC",
+            "closest_threshold", "closest_validation_FPR", "closest_validation_TPR",
+            "accuracy", "precision", "recall", "TPR", "FPR", "FNR", "TNR", "balanced_accuracy",
+        ]
+        results[round_columns] = results[round_columns].round(4)
+        return results, roc_curves, confusion_matrices, specs_out

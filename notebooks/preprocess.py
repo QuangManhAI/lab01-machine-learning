@@ -17,6 +17,7 @@ MIN_CLEAN_WORDS = 5
 MIN_CLEAN_CHARS = 25
 BALANCE_MAX_PER_SOURCE_FAMILY = 1000
 BALANCE_RANDOM_SEED = 42
+EXTRA_HAM_SAMPLES = 1000
 
 HTML_ARTIFACT_STOPWORDS = {
     "align", "alink", "arial", "bgcolor", "blockquote", "border", "br", "cellpadding", "cellspacing",
@@ -152,6 +153,40 @@ def balance_dataset(data: pd.DataFrame, max_per_source_family: int = BALANCE_MAX
     return pd.concat(parts, ignore_index=True).sample(frac=1, random_state=random_seed).reset_index(drop=True)
 
 
+def add_extra_ham_samples(
+    processed: pd.DataFrame,
+    candidates: pd.DataFrame,
+    extra_ham_samples: int = EXTRA_HAM_SAMPLES,
+    random_seed: int = BALANCE_RANDOM_SEED,
+) -> pd.DataFrame:
+    if extra_ham_samples <= 0:
+        return processed.sample(frac=1, random_state=random_seed).reset_index(drop=True)
+
+    used_keys = set(zip(processed["clean_text"], processed["label"]))
+    extra_ham = candidates[candidates["label"] == "ham"].copy()
+    extra_ham = extra_ham[~extra_ham.apply(lambda row: (row["clean_text"], row["label"]) in used_keys, axis=1)]
+    if extra_ham.empty:
+        return processed.sample(frac=1, random_state=random_seed).reset_index(drop=True)
+
+    sample_size = min(extra_ham_samples, len(extra_ham))
+    sampled_ham = _sample_evenly_by_source_family(extra_ham, sample_size, random_seed)
+    return (
+        pd.concat([processed, sampled_ham], ignore_index=True)
+        .sample(frac=1, random_state=random_seed)
+        .reset_index(drop=True)
+    )
+
+
+def mixed_label_source_families(data: pd.DataFrame) -> list[str]:
+    table = pd.crosstab(data["source_family"], data["label"])
+    return sorted(table[(table.get("ham", 0) > 0) & (table.get("spam", 0) > 0)].index.tolist())
+
+
+def filter_mixed_label_sources(data: pd.DataFrame) -> pd.DataFrame:
+    mixed_sources = mixed_label_source_families(data)
+    return data[data["source_family"].isin(mixed_sources)].copy().reset_index(drop=True)
+
+
 def build_raw_export(data: pd.DataFrame) -> pd.DataFrame:
     raw_data = data.copy()
     for column in ["subject", "body", "source", "label"]:
@@ -163,17 +198,37 @@ def build_raw_export(data: pd.DataFrame) -> pd.DataFrame:
     return raw_data.drop_duplicates(subset=["text", "label"])
 
 
-def process_raw_dataset(raw_data: pd.DataFrame, balance: bool = True):
+def process_raw_dataset(
+    raw_data: pd.DataFrame,
+    balance: bool = True,
+    mixed_sources_only: bool = True,
+    extra_ham_samples: int = 0,
+):
     full_data = add_preprocessing_columns(raw_data).drop_duplicates(subset=["clean_text", "label"])
-    trainable = filter_trainable_rows(full_data)
+    all_trainable = filter_trainable_rows(full_data)
+    trainable = all_trainable
+    if mixed_sources_only:
+        trainable = filter_mixed_label_sources(trainable)
     processed = balance_dataset(trainable) if balance else trainable.sample(frac=1, random_state=BALANCE_RANDOM_SEED).reset_index(drop=True)
+    processed = add_extra_ham_samples(processed, all_trainable, extra_ham_samples=extra_ham_samples)
     return full_data, trainable, processed
 
 
-def export_processed_datasets(raw_data: pd.DataFrame, output_dir: Path = Path("data/processed"), balance: bool = True):
+def export_processed_datasets(
+    raw_data: pd.DataFrame,
+    output_dir: Path = Path("data/processed"),
+    balance: bool = True,
+    mixed_sources_only: bool = True,
+    extra_ham_samples: int = 0,
+):
     output_dir.mkdir(parents=True, exist_ok=True)
     raw_export = build_raw_export(raw_data)
-    full_data, trainable, processed = process_raw_dataset(raw_export, balance=balance)
+    full_data, trainable, processed = process_raw_dataset(
+        raw_export,
+        balance=balance,
+        mixed_sources_only=mixed_sources_only,
+        extra_ham_samples=extra_ham_samples,
+    )
     columns = [
         "email_id", "source", "source_family", "source_url", "local_path", "extracted_from", "extracted_path",
         "archive_path", "label", "sender", "recipient", "subject", "body", "text", "clean_text",
@@ -187,7 +242,14 @@ def export_processed_datasets(raw_data: pd.DataFrame, output_dir: Path = Path("d
     raw_export[raw_columns].to_csv(output_dir / "emails_raw.csv", index=False)
     full_data[columns].to_csv(output_dir / "emails_full.csv", index=False)
     processed[columns].to_csv(output_dir / "emails.csv", index=False)
-    write_preprocessing_balance_report(full_data, trainable, processed, output_dir / "metrics/preprocessing_balance_report.md")
+    write_preprocessing_balance_report(
+        full_data,
+        trainable,
+        processed,
+        output_dir / "metrics/preprocessing_balance_report.md",
+        mixed_sources_only=mixed_sources_only,
+        extra_ham_samples=extra_ham_samples,
+    )
     return raw_export, full_data, processed
 
 
@@ -333,14 +395,25 @@ def train_source_crosstab(train_data: pd.DataFrame, top_n: int = 15) -> pd.DataF
     return pd.crosstab(train_data["source_family"], train_data["label"]).head(top_n)
 
 
-def write_preprocessing_balance_report(full_data, trainable_data, balanced_data, path: Path):
+def write_preprocessing_balance_report(
+    full_data,
+    trainable_data,
+    balanced_data,
+    path: Path,
+    mixed_sources_only: bool = True,
+    extra_ham_samples: int = 0,
+):
     path.parent.mkdir(parents=True, exist_ok=True)
     lines = [
         "# Preprocessing And Balance Report",
         "",
         f"Raw exported rows before trainable filters: {len(full_data)}",
+        f"Mixed-source-only train filter: {mixed_sources_only}",
+        f"Extra ham samples added after balance: {extra_ham_samples}",
+        f"Trainable source families: {trainable_data['source_family'].nunique()}",
         f"Trainable rows after clean-text filters: {len(trainable_data)}",
-        f"Balanced rows used by EDA/train: {len(balanced_data)}",
+        f"Processed source families: {balanced_data['source_family'].nunique()}",
+        f"Processed rows used by EDA/train: {len(balanced_data)}",
         "",
         "## Label Counts",
         "",
@@ -348,7 +421,7 @@ def write_preprocessing_balance_report(full_data, trainable_data, balanced_data,
         "```text",
         trainable_data["label"].value_counts().to_string(),
         "```",
-        "### After Balance",
+        "### After Balance And Extra Ham",
         "```text",
         balanced_data["label"].value_counts().to_string(),
         "```",
