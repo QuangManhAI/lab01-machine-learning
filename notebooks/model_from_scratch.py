@@ -611,9 +611,7 @@ class SklearnModelChecker:
         estimators = {
             "Naive Bayes": MultinomialNB(alpha=1.0),
             "Logistic Regression": LogisticRegression(max_iter=1000),
-            "Logistic Regression (C=0.5, balanced)": LogisticRegression(C=0.5, max_iter=1000, class_weight='balanced'),
             "Linear SVM (Calibrated)": CalibratedClassifierCV(estimator=LinearSVC(dual='auto'), method="sigmoid", cv=3),
-            "Linear SVM (Raw)": LinearSVC(C=1.0, dual='auto', max_iter=2000),
         }
         
         rows = []
