@@ -13,3 +13,4 @@ __pycache__/
 data/raw/downloads/
 data/processed/
 models/
+.DS_Store
