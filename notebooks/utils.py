@@ -66,6 +66,34 @@ def feature_quality_summary(frame: pd.DataFrame, name: str) -> None:
     display(preprocess.duplicate_data_summary(frame, subset=["clean_text", "label"]))
 
 
+def add_threshold_metadata_text(frame: pd.DataFrame, base_text_column: str = "clean_text") -> pd.DataFrame:
+    frame = frame.copy()
+    index = frame.index
+    base_text = frame[base_text_column].fillna("").astype(str)
+    subject_text = frame.get("subject", pd.Series("", index=index)).fillna("").map(preprocess.clean_email_text)
+    sender_text = (
+        frame.get("sender", pd.Series("", index=index))
+        .fillna("")
+        .astype(str)
+        .str.replace(r"[^a-zA-Z0-9@._-]+", " ", regex=True)
+        .str.lower()
+    )
+    source_family_token = _metadata_token(frame.get("source_family", pd.Series("", index=index)), "sourcefamily")
+    source_token = _metadata_token(frame.get("source", pd.Series("", index=index)), "source")
+    frame["clean_plus_meta"] = (
+        base_text
+        + " subject "
+        + subject_text
+        + " sender "
+        + sender_text
+        + " "
+        + source_family_token
+        + " "
+        + source_token
+    )
+    return frame
+
+
 def run_preprocess_step(raw_data: pd.DataFrame) -> tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame]:
     full_clean_data, before_balance_data, unbalanced_processed_data = preprocess.process_raw_dataset(
         raw_data,
@@ -342,8 +370,14 @@ def run_threshold_tuning(
     matrix_labels = [negative_label, positive_label]
     base_threshold_split = preprocess.split_training_data(processed_data)
     text_column = base_threshold_split["text_column"]
-    train_validation = base_threshold_split["train_data"].copy().reset_index(drop=True)
-    test_frame = base_threshold_split["test_data"].copy().reset_index(drop=True)
+    train_validation = add_threshold_metadata_text(
+        base_threshold_split["train_data"].copy().reset_index(drop=True),
+        text_column,
+    )
+    test_frame = add_threshold_metadata_text(
+        base_threshold_split["test_data"].copy().reset_index(drop=True),
+        text_column,
+    )
 
     train_pool, validation_frame = train_test_split(
         train_validation,
@@ -357,6 +391,7 @@ def run_threshold_tuning(
     if data_v2.empty:
         data_v2_train_only = pd.DataFrame(columns=train_pool.columns)
     else:
+        data_v2 = add_threshold_metadata_text(data_v2, text_column)
         holdout_clean_texts = set(test_frame[text_column].fillna("")) | set(validation_frame[text_column].fillna(""))
         data_v2_train_only = data_v2[~data_v2[text_column].isin(holdout_clean_texts)].copy()
 
@@ -414,7 +449,9 @@ def run_threshold_tuning(
     )
     display_columns = [
         "training_strategy",
+        "feature_set",
         "model",
+        "text_column",
         "score_type",
         "train_rows",
         "ham_train",
@@ -437,7 +474,6 @@ def run_threshold_tuning(
     ]
     display(threshold_results[display_columns].sort_values(["FPR", "TPR"], ascending=[True, False]))
 
-    assert len(confusion_matrices) == 9
     _plot_confusion_matrix_grid(
         confusion_matrices,
         "training_strategy",
@@ -476,7 +512,10 @@ def plot_low_fpr_roc(threshold_context: dict) -> pd.DataFrame:
             curve["tpr"],
             linestyle=line_styles.get(curve["training_strategy"], "-"),
             linewidth=2,
-            label=f'{curve["training_strategy"]} / {curve["model"]} (AUC={curve["auc"]:.3f})',
+            label=(
+                f'{curve["training_strategy"]} / {curve.get("feature_set", "Text only")} / '
+                f'{curve["model"]} (AUC={curve["auc"]:.3f})'
+            ),
         )
         plt.scatter(curve["selected_validation_FPR"], curve["selected_validation_TPR"], s=35)
 
@@ -493,7 +532,7 @@ def plot_low_fpr_roc(threshold_context: dict) -> pd.DataFrame:
     plt.show()
 
     strategy_compare = threshold_context["threshold_results"].pivot_table(
-        index="model",
+        index=["feature_set", "model"],
         columns="training_strategy",
         values=["TPR", "FPR", "precision", "balanced_accuracy"],
         aggfunc="first",
@@ -517,6 +556,7 @@ def run_failure_analysis(
         for spec in threshold_context["threshold_specs"]
         if spec["training_strategy"] == analysis_choice["training_strategy"]
         and spec["model"] == analysis_choice["model"]
+        and spec.get("feature_set") == analysis_choice.get("feature_set")
     )
     analysis_pipeline = analysis_spec["pipeline"]
     analysis_text_column = analysis_spec.get("text_column", text_column)
@@ -579,7 +619,14 @@ def run_failure_analysis(
     _plot_score_overlap(analysis_errors, threshold, analysis_score_type)
     fp_near, fn_near = _display_nearest_errors(analysis_errors)
 
-    conflicts = model_checker.conflicting_clean_texts(before_balance_data, text_column=analysis_text_column, top_n=20)
+    conflict_reference_data = before_balance_data
+    if analysis_text_column not in conflict_reference_data.columns:
+        conflict_reference_data = add_threshold_metadata_text(conflict_reference_data, text_column)
+    conflicts = model_checker.conflicting_clean_texts(
+        conflict_reference_data,
+        text_column=analysis_text_column,
+        top_n=20,
+    )
     display(conflicts)
 
     fp_tokens = model_checker.top_error_tokens(analysis_errors, "FP", text_column=analysis_text_column, top_n=20)
@@ -620,6 +667,18 @@ def _dataset_summary(name: str, frame: pd.DataFrame) -> dict:
         "spam": int((frame["label"] == "spam").sum()),
         "source_families": frame["source_family"].nunique(),
     }
+
+
+def _metadata_token(values: pd.Series, prefix: str) -> pd.Series:
+    normalized = (
+        values.fillna("")
+        .astype(str)
+        .str.replace(r"[^a-zA-Z0-9]+", "_", regex=True)
+        .str.strip("_")
+        .str.lower()
+    )
+    normalized = normalized.mask(normalized.eq(""), "missing")
+    return prefix + "_" + normalized
 
 
 def _label_count_row(split: str, frame: pd.DataFrame) -> dict:
@@ -706,11 +765,20 @@ def _plot_confusion_matrix_grid(
     matrix_labels: list[str] | None = None,
 ) -> None:
     labels = matrix_labels or ["ham", "spam"]
-    fig, axes = plt.subplots(3, 3, figsize=(14, 12))
-    for axis, payload in zip(axes.ravel(), matrices):
+    columns = 3
+    rows = int(np.ceil(len(matrices) / columns))
+    fig, axes = plt.subplots(rows, columns, figsize=(14, max(4, rows * 3.8)))
+    axes = np.asarray(axes).ravel()
+    for axis, payload in zip(axes, matrices):
         display_obj = ConfusionMatrixDisplay(confusion_matrix=payload["matrix"], display_labels=labels)
         display_obj.plot(ax=axis, values_format="d", colorbar=False)
-        axis.set_title(f"{payload[strategy_key]}\n{payload['model']}")
+        title_parts = [payload[strategy_key]]
+        if "feature_set" in payload:
+            title_parts.append(payload["feature_set"])
+        title_parts.append(payload["model"])
+        axis.set_title("\n".join(title_parts), fontsize=9)
+    for axis in axes[len(matrices):]:
+        axis.axis("off")
     plt.suptitle(title, y=1.02)
     plt.tight_layout()
     plt.show()
@@ -732,10 +800,16 @@ def _plot_scratch_confusion_matrices(y_test: np.ndarray, predictions_by_model: d
 
 
 def _print_threshold_choice(threshold_results: pd.DataFrame, target_fpr: float, target_tpr: float) -> pd.Series:
-    validation_candidates = threshold_results[threshold_results["validation_FPR"] <= target_fpr].sort_values(
-        "validation_TPR",
-        ascending=False,
+    selection_fpr_limit = target_fpr * 0.75
+    validation_candidates = threshold_results[threshold_results["validation_FPR"] <= selection_fpr_limit].sort_values(
+        ["validation_TPR", "validation_FPR", "train_rows"],
+        ascending=[False, True, False],
     )
+    if validation_candidates.empty:
+        validation_candidates = threshold_results[threshold_results["validation_FPR"] <= target_fpr].sort_values(
+            ["validation_TPR", "validation_FPR", "train_rows"],
+            ascending=[False, True, False],
+        )
     if validation_candidates.empty:
         validation_choice = threshold_results.sort_values(
             ["validation_FPR", "validation_TPR"],
@@ -745,8 +819,11 @@ def _print_threshold_choice(threshold_results: pd.DataFrame, target_fpr: float, 
     else:
         validation_choice = validation_candidates.iloc[0]
 
+    choice_feature_set = validation_choice.get("feature_set", "Text only")
     print(
-        f'Validation-selected candidate: {validation_choice["training_strategy"]} / {validation_choice["model"]} '
+        f'Validation-selected candidate: {validation_choice["training_strategy"]} / '
+        f'{choice_feature_set} / {validation_choice["model"]} '
+        f"(selection validation FPR limit <= {selection_fpr_limit:.4f}) "
         f'-> validation TPR={validation_choice["validation_TPR"]:.4f}, '
         f'validation FPR={validation_choice["validation_FPR"]:.4f}; '
         f'test TPR={validation_choice["TPR"]:.4f}, test FPR={validation_choice["FPR"]:.4f}, '
@@ -756,17 +833,19 @@ def _print_threshold_choice(threshold_results: pd.DataFrame, target_fpr: float, 
     test_diagnostic = threshold_results[threshold_results["FPR"] <= target_fpr].sort_values("TPR", ascending=False)
     if not test_diagnostic.empty:
         best_test = test_diagnostic.iloc[0]
+        best_feature_set = best_test.get("feature_set", "Text only")
         print(
             "Diagnostic only - best observed test TPR with test FPR <= 1%: "
-            f'{best_test["training_strategy"]} / {best_test["model"]} '
+            f'{best_test["training_strategy"]} / {best_feature_set} / {best_test["model"]} '
             f'-> TPR={best_test["TPR"]:.4f}, FPR={best_test["FPR"]:.4f}, '
             f'threshold={best_test["selected_threshold"]:.4f}'
         )
     else:
         best_test = threshold_results.sort_values(["FPR", "TPR"], ascending=[True, False]).iloc[0]
+        best_feature_set = best_test.get("feature_set", "Text only")
         print(
             "Diagnostic only - no model keeps test FPR <= 1%. Lowest-FPR option: "
-            f'{best_test["training_strategy"]} / {best_test["model"]} '
+            f'{best_test["training_strategy"]} / {best_feature_set} / {best_test["model"]} '
             f'-> TPR={best_test["TPR"]:.4f}, FPR={best_test["FPR"]:.4f}'
         )
 
