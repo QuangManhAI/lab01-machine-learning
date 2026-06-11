@@ -13,7 +13,7 @@ from sklearn.linear_model import LogisticRegression
 from sklearn.metrics import accuracy_score, auc, classification_report, confusion_matrix, precision_recall_fscore_support, roc_curve
 from sklearn.model_selection import train_test_split
 from sklearn.naive_bayes import MultinomialNB
-from sklearn.pipeline import Pipeline
+from sklearn.pipeline import FeatureUnion, Pipeline
 from sklearn.svm import LinearSVC
 from sklearn.utils.class_weight import compute_sample_weight
 
@@ -151,6 +151,33 @@ class SklearnModelChecker:
             max_df=0.95,
             ngram_range=(1, 2),
             sublinear_tf=True
+        )
+
+    def make_word_char_vectorizer(self) -> FeatureUnion:
+        return FeatureUnion(
+            [
+                (
+                    "word",
+                    TfidfVectorizer(
+                        stop_words=preprocess.stop_words_for_vectorizer(),
+                        min_df=1,
+                        max_df=0.98,
+                        ngram_range=(1, 3),
+                        sublinear_tf=True,
+                        max_features=100_000,
+                    ),
+                ),
+                (
+                    "char",
+                    TfidfVectorizer(
+                        analyzer="char_wb",
+                        ngram_range=(3, 5),
+                        min_df=3,
+                        sublinear_tf=True,
+                        max_features=80_000,
+                    ),
+                ),
+            ]
         )
 
     def build_model(self) -> Pipeline:
@@ -608,11 +635,35 @@ class SklearnModelChecker:
         from sklearn.linear_model import LogisticRegression
         from sklearn.naive_bayes import MultinomialNB
         
-        estimators = {
-            "Naive Bayes": MultinomialNB(alpha=1.0),
-            "Logistic Regression": LogisticRegression(max_iter=1000),
-            "Linear SVM (Calibrated)": CalibratedClassifierCV(estimator=LinearSVC(dual='auto'), method="sigmoid", cv=3),
-        }
+        feature_estimator_groups = [
+            {
+                "feature_set": "Text only",
+                "text_column": text_column,
+                "vectorizer_factory": self.make_tfidf_vectorizer,
+                "estimators": {
+                    "Naive Bayes": MultinomialNB(alpha=1.0),
+                    "Logistic Regression": LogisticRegression(max_iter=1000),
+                    "Linear SVM (Calibrated)": CalibratedClassifierCV(
+                        estimator=LinearSVC(dual="auto"),
+                        method="sigmoid",
+                        cv=3,
+                    ),
+                },
+            }
+        ]
+        metadata_column = "clean_plus_meta"
+        if all(metadata_column in frame.columns for frame in [validation_frame, test_frame, *train_modes.values()]):
+            feature_estimator_groups.append(
+                {
+                    "feature_set": "Text + metadata",
+                    "text_column": metadata_column,
+                    "vectorizer_factory": self.make_word_char_vectorizer,
+                    "estimators": {
+                        "Linear SVM (Meta C0.5)": LinearSVC(C=0.5, dual="auto"),
+                        "Linear SVM (Meta C1)": LinearSVC(C=1.0, dual="auto"),
+                    },
+                }
+            )
         
         rows = []
         roc_curves = []
@@ -620,68 +671,84 @@ class SklearnModelChecker:
         specs_out = []
         
         for strategy_name, train_frame in train_modes.items():
-            for model_name, estimator in estimators.items():
-                pipeline = Pipeline([("tfidf", self.make_tfidf_vectorizer()), ("model", clone(estimator))])
-                pipeline.fit(train_frame[text_column], train_frame["label"])
+            for feature_group in feature_estimator_groups:
+                experiment_text_column = feature_group["text_column"]
+                for model_name, estimator in feature_group["estimators"].items():
+                    pipeline = Pipeline(
+                        [
+                            ("tfidf", feature_group["vectorizer_factory"]()),
+                            ("model", clone(estimator)),
+                        ]
+                    )
+                    pipeline.fit(train_frame[experiment_text_column], train_frame["label"])
                 
-                val_scores, score_type = self.positive_scores(pipeline, validation_frame[text_column], positive_label)
-                threshold_info = self.threshold_summary(
-                    validation_frame["label"],
-                    val_scores,
-                    target_fpr=target_fpr,
-                    target_tpr=target_tpr,
-                    positive_label=positive_label,
-                )
-                test_scores, _ = self.positive_scores(pipeline, test_frame[text_column], positive_label)
-                test_metrics = self.metrics_at_threshold(
-                    test_frame["label"],
-                    test_scores,
-                    threshold=threshold_info["threshold"],
-                    positive_label=positive_label,
-                )
+                    val_scores, score_type = self.positive_scores(
+                        pipeline,
+                        validation_frame[experiment_text_column],
+                        positive_label,
+                    )
+                    threshold_info = self.threshold_summary(
+                        validation_frame["label"],
+                        val_scores,
+                        target_fpr=target_fpr,
+                        target_tpr=target_tpr,
+                        positive_label=positive_label,
+                    )
+                    test_scores, _ = self.positive_scores(pipeline, test_frame[experiment_text_column], positive_label)
+                    test_metrics = self.metrics_at_threshold(
+                        test_frame["label"],
+                        test_scores,
+                        threshold=threshold_info["threshold"],
+                        positive_label=positive_label,
+                    )
                 
-                row = {
-                    "training_strategy": strategy_name,
-                    "model": model_name,
-                    "score_type": score_type,
-                    "train_rows": len(train_frame),
-                    "ham_train": int((train_frame["label"] == "ham").sum()),
-                    "spam_train": int((train_frame["label"] == "spam").sum()),
-                    "validation_rows": len(validation_frame),
-                    "test_rows": len(test_frame),
-                    "selected_threshold": threshold_info["threshold"],
-                    "validation_FPR": threshold_info["validation_fpr_at_threshold"],
-                    "validation_TPR": threshold_info["validation_tpr_at_threshold"],
-                    "validation_AUC": threshold_info["roc_auc"],
-                    "can_reach_99_1_on_validation": threshold_info["can_reach_target_on_validation"],
-                    "closest_threshold": threshold_info["closest_threshold"],
-                    "closest_validation_FPR": threshold_info["closest_validation_fpr"],
-                    "closest_validation_TPR": threshold_info["closest_validation_tpr"],
-                    **test_metrics,
-                }
-                rows.append(row)
-                roc_curves.append({
-                    "training_strategy": strategy_name,
-                    "model": model_name,
-                    "fpr": threshold_info["roc_fpr"],
-                    "tpr": threshold_info["roc_tpr"],
-                    "auc": threshold_info["roc_auc"],
-                    "selected_validation_FPR": threshold_info["validation_fpr_at_threshold"],
-                    "selected_validation_TPR": threshold_info["validation_tpr_at_threshold"],
-                })
-                confusion_matrices.append({
-                    "training_strategy": strategy_name,
-                    "model": model_name,
-                    "matrix": np.array([[test_metrics["TN"], test_metrics["FP"]], [test_metrics["FN"], test_metrics["TP"]]]),
-                })
-                specs_out.append({
-                    "training_strategy": strategy_name,
-                    "model": model_name,
-                    "text_column": text_column,
-                    "train_frame": train_frame,
-                    "pipeline": pipeline,
-                    "fit_params": {}
-                })
+                    row = {
+                        "training_strategy": strategy_name,
+                        "feature_set": feature_group["feature_set"],
+                        "text_column": experiment_text_column,
+                        "model": model_name,
+                        "score_type": score_type,
+                        "train_rows": len(train_frame),
+                        "ham_train": int((train_frame["label"] == "ham").sum()),
+                        "spam_train": int((train_frame["label"] == "spam").sum()),
+                        "validation_rows": len(validation_frame),
+                        "test_rows": len(test_frame),
+                        "selected_threshold": threshold_info["threshold"],
+                        "validation_FPR": threshold_info["validation_fpr_at_threshold"],
+                        "validation_TPR": threshold_info["validation_tpr_at_threshold"],
+                        "validation_AUC": threshold_info["roc_auc"],
+                        "can_reach_99_1_on_validation": threshold_info["can_reach_target_on_validation"],
+                        "closest_threshold": threshold_info["closest_threshold"],
+                        "closest_validation_FPR": threshold_info["closest_validation_fpr"],
+                        "closest_validation_TPR": threshold_info["closest_validation_tpr"],
+                        **test_metrics,
+                    }
+                    rows.append(row)
+                    roc_curves.append({
+                        "training_strategy": strategy_name,
+                        "feature_set": feature_group["feature_set"],
+                        "model": model_name,
+                        "fpr": threshold_info["roc_fpr"],
+                        "tpr": threshold_info["roc_tpr"],
+                        "auc": threshold_info["roc_auc"],
+                        "selected_validation_FPR": threshold_info["validation_fpr_at_threshold"],
+                        "selected_validation_TPR": threshold_info["validation_tpr_at_threshold"],
+                    })
+                    confusion_matrices.append({
+                        "training_strategy": strategy_name,
+                        "feature_set": feature_group["feature_set"],
+                        "model": model_name,
+                        "matrix": np.array([[test_metrics["TN"], test_metrics["FP"]], [test_metrics["FN"], test_metrics["TP"]]]),
+                    })
+                    specs_out.append({
+                        "training_strategy": strategy_name,
+                        "feature_set": feature_group["feature_set"],
+                        "model": model_name,
+                        "text_column": experiment_text_column,
+                        "train_frame": train_frame,
+                        "pipeline": pipeline,
+                        "fit_params": {},
+                    })
         
         results = pd.DataFrame(rows)
         round_columns = [
