@@ -1,107 +1,48 @@
-## **PRACTICE 1: CLASSIFYING SPAM EMAILS** 
+# Spam Classifier Project Requirements
 
-## **Problem:** 
+Quick notes on what this project is about, inputs/outputs, and step-by-step tasks.
 
-- Given a dataset of emails, determine whether each email is "spam" or "not spam." 
+## Purpose
+Build a spam email detector. We need to find the best decision threshold on the Validation set so that the False Positive Rate (FPR) is <= 1% (very important to avoid flagging good emails as spam), while keeping the True Positive Rate (TPR) as high as possible on the Test set. We must use scratch models instead of library ones for the final model.
 
-## **Data:** 
+## Input
+Raw email dataset containing:
+- `email_text`: Email body content.
+- `subject`: Email subject line.
+- `sender`: Sender's email address.
+- `source_family`: Where the email came from.
+- `label`: Label of the email (`spam` or `ham`).
 
-- Each email can be represented as a vector of features, such as: 
+## Output
+- A fully executed Jupyter notebook `lab01.ipynb` with all outputs, graphs, and results tables.
+- Saved best model payload at `models/spam_nb.joblib` (packaged with the scratch model, the TF-IDF vectorizer, decision threshold, and score type).
+- Text metrics reports saved under `data/processed/metrics/`.
 
-   - **Word frequency:** The number of times certain keywords appear in the email. 
+## Steps to Do
 
-   - **Character frequency:** The frequency of specific characters (e.g., exclamation marks, dollar signs). 
+### Setup & Raw Data
+- **Step 0**: Import python libraries and append the `src/` folder to `sys.path`.
+- **Step 1**: Load raw data and processed data.
+- **Step 2**: Plot simple EDA on raw labels and source families.
+- **Step 3**: Count missing values and duplicate rows.
 
-   - **Sender information:** The email address of the sender. 
+### Preprocessing & Splitting
+- **Step 4**: Clean text (lowercase, strip HTML, remove punctuation and stop words).
+  - **Step 4.1**: Print before/after text of 5 actual samples to check if the cleaning works.
+  - **Step 4.2**: Verify that there are no new missing values or duplicates after cleaning.
+- **Step 5**: Split data into Train (70%), Val (15%), and Test (15%) stratified by label. Enrich the text by joining `clean_text` with `subject`, `sender`, and `source_family` into a single field `clean_plus_meta`.
+- **Step 6**: Downsample ham on the Train set to create a balanced version (1:1), keeping the original unbalanced version.
+- **Step 7**: Extract TF-IDF features on the training set.
 
-   - **Recipient information:** The email address of the recipient. 
+### Modeling & Evaluation
+- **Step 8**: Train three scratch models (Naive Bayes, Logistic Regression, Linear SVM) on both Balanced and Unbalanced train sets.
+- **Step 9**: Compare scratch model predictions/probabilities with sklearn equivalents in a single cell to prove correctness.
+- **Step 10**: Search validation thresholds to get validation FPR <= 1% and maximize TPR.
+- **Step 10.1**: Plot validation ROC curves near target FPR.
+- **Step 10.2**: Predict on the Test set using the validation-selected thresholds. Print results table (accuracy, precision, `test_TPR`, `test_FPR`, TN, FP, FN, TP) and plot test confusion matrices.
+- **Step 10.2.1**: Write notes comparing balanced and unbalanced training strategies.
+- **Step 10.2.2**: Calculate test TPR at exactly/under 1% test FPR constraint.
+- **Step 10.3**: Run failure analysis on the best model (inspect nearest errors, check top error-associated tokens, and check source-level errors).
 
-   - **Subject line:** The text in the subject line. 
-
-   - **Email body:** The text content of the email. 
-
-## **Classification Approach:** 
-
-- **Logistic Regression:** A popular choice for binary classification problems like this. It models the probability of an email being spam as a logistic function of its features. 
-
-- **Support Vector Machines (SVM):** Another effective method for classification, especially when dealing with high-dimensional data. SVM finds a hyperplane that separates the spam and non-spam emails. 
-
-- **Naive Bayes:** A simple yet effective algorithm based on Bayes' theorem. It assumes that the features are independent given the class (spam or not spam). 
-
-## **Workflow:** 
-
-## 1. **Data Preprocessing:** 
-
-   - Clean the data by removing stop words, punctuation, and HTML tags. 
-
-   - Convert the text data into numerical features (e.g., using TF-IDF). 
-
-   - Split the dataset into training and testing sets. 
-
-2. **Model Training:** 
-
-   - Train the chosen classification model on the training set. 
-
-3. **Model Evaluation:** 
-
-   - Evaluate the model's performance on the testing set using metrics like accuracy, precision, recall, and F1-score. 
-
-## 4. **Model Deployment:** 
-
-- Deploy the trained model to classify new, unseen emails. 
-
-## **Additional Considerations:** 
-
-- **Feature Engineering:** Experiment with different feature combinations to improve model performance. 
-
-- **Hyperparameter Tuning:** Optimize the model's parameters (e.g., regularization strength, learning rate) to achieve better results. 
-
-- **Ensemble Methods:** Combine multiple models (e.g., using random forests or boosting) to improve generalization and reduce overfitting. 
-
-## **Real-world Applications:** 
-
-- **Email filtering:** Automatically filtering spam emails from your inbox. 
-
-- **Sentiment analysis:** Determining the sentiment (positive, negative, or neutral) of text data (e.g., product reviews, social media posts). 
-
-- **Fraud detection:** Identifying fraudulent transactions or activities. 
-
-- **Medical diagnosis:** Predicting diseases based on patient symptoms and medical records. 
-
-Here are several ways to download data for classifying spam emails: 
-
-## **1. Public Datasets:** 
-
-- **UCI Machine Learning Repository:** This repository hosts a variety of datasets, including several related to email classification. One popular dataset is the **Enron Email Dataset** , which contains a large collection of emails from Enron employees. 
-
-- **SpamAssassin:** This open-source spam filtering software comes with a corpus of spam and non-spam emails that can be used for training and testing. 
-
-- **Kaggle:** Kaggle often hosts competitions related to email classification, and the datasets used in these competitions can be downloaded. 
-
-## **2. Web Scraping:** 
-
-- **Email Archive Websites:** Websites like Google Groups, Yahoo Groups, or mailing lists often have archives of emails that can be scraped. However, be mindful of terms of service and ethical considerations when scraping data. 
-
-- **Publicly Accessible Email Accounts:** Some organizations or individuals may have publicly accessible email accounts that you can scrape with permission. 
-
-## **3. Email Generation Tools:** 
-
-- **Spam Generation Tools:** There are tools available that can generate synthetic spam emails to supplement your dataset. However, be aware that these generated emails may not accurately reflect real-world spam characteristics. 
-
-## **4. Crowdsourcing:** 
-
-- **Amazon Mechanical Turk:** You can use platforms like Amazon Mechanical Turk to hire workers to label emails as spam or not spam. This can be a cost-effective way to obtain a large labeled dataset. 
-
-## **5. Personal Data:** 
-
-- **If you have access to a large collection of personal emails, you can use them for classification.** However, ensure that you have obtained proper consent from the email owners and that you are complying with relevant privacy regulations. 
-
-## **When downloading data, consider the following factors:** 
-
-- **Size:** The dataset should be large enough to train a robust model. 
-
-- **Quality:** The data should be clean and accurate, with clear labels for spam and non-spam emails. 
-
-- **Diversity:** The dataset should represent a variety of spam and non-spam email types to ensure that the model can generalize well to unseen data. 
-
-- **Relevance:** The data should be relevant to your specific classification task. For example, if you are interested in classifying spam emails in a particular industry, you may want to focus on data from that industry. 
+### Save & Deploy
+- **Step 11**: Save the best scratch Naive Bayes model payload. Predict on new sample emails to verify it runs in deployment.
